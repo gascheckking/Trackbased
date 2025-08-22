@@ -1,11 +1,11 @@
-export const runtime = "nodejs";
+const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
 export async function GET(req, { params }) {
   try {
     const pathParts = params.path || [];
     const suffix = req.nextUrl.search || "";
     const upstream = `https://build.wield.xyz/${pathParts.join("/")}${suffix}`;
-
     const r = await fetch(upstream, {
       headers: {
         "x-api-key": process.env.WIELD_API_KEY || ""
@@ -28,7 +28,6 @@ export async function POST(req, { params }) {
     const pathParts = params.path || [];
     const suffix = req.nextUrl.search || "";
     const upstream = `https://build.wield.xyz/${pathParts.join("/")}${suffix}`;
-
     const body = await req.text();
 
     const r = await fetch(upstream, {
