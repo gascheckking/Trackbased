@@ -22,33 +22,38 @@ export default function Page() {
     document.documentElement.setAttribute("data-theme", theme);
   }, [theme]);
 
-  // Initial fetcher – Trading + Ticker
   useEffect(() => {
-    (async () => {
-      try {
-        setLoading(true);
-        // Nya/aktiva packs
-        const pk = await wieldFetch(`vibe/boosterbox/recent?limit=24&includeMetadata=true&chainId=${CHAIN_ID}`);
-        setPacks(pk?.data || pk || []);
+  (async () => {
+    try {
+      setLoading(true);
 
-        // “Verified” – pack-level (filtrera på flag i metadata när den finns)
-        const v = (pk?.data || pk || []).filter(p => (p?.metadata?.verified === true));
-        setVerified(v.slice(0, 12));
+      // Fetch all packs
+      const packs = await wieldFetch(`vibe/boosterbox/recent?limit=100&includeMetadata=true&chainId=${CHAIN_ID}`);
+      setPacks(packs?.data || packs || []);
 
-        // Ticker (visar bara EPIC/LEGENDARY pulls)
-        const recent = await wieldFetch(`vibe/boosterbox/recent?limit=100&includeMetadata=true&status=opened&rarityGreaterThan=2&chainId=${CHAIN_ID}`);
-        const items = (recent?.data || recent || []).map(x => ({
-          id: x.id ?? `${x.contractAddress}-${x.tokenId ?? Math.random()}`,
-          txt: `${short(x?.owner)} pulled ${rarityName(x?.rarity)} in ${x?.collectionName || short(x?.contractAddress)}`,
-        }));
-        setTicker(items);
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
+      // Fetch verified packs
+      const verified = (packs?.data || packs || []).filter(p => (p?.metadata?.verified === true));
+      setVerified(verified.slice(0, 12));
+
+      // Fetch recent activity (opened pulls)
+      const recentActivity = await wieldFetch(`vibe/boosterbox/recent?limit=100&includeMetadata=true&status=opened&rarityGreaterThan=2&chainId=${CHAIN_ID}`);
+      const activityItems = (recentActivity?.data || recentActivity || []).map(x => ({
+        id: x.id ?? `${x.contractAddress}-${x.tokenId ?? Math.random()}`,
+        txt: `${short(x?.owner)} pulled ${rarityName(x?.rarity)} in ${x?.collectionName || short(x?.contractAddress)}`,
+      }));
+      setTicker(activityItems);
+
+      // Fetch bought items (you need to define the appropriate endpoint)
+      const boughtItems = await wieldFetch(`vibe/owner/${wallet}/bought?limit=100&chainId=${CHAIN_ID}`);
+      setBoughtItems(boughtItems?.data || boughtItems || []);
+
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  })();
+}, [wallet]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
