@@ -216,4 +216,75 @@ export default function Page() {
           {/* Right column – Verified + Quick buys */}
           <aside className="panel">
             <div className="panel-head">
-              <div className="panel-title">Verified by VibeMarket
+              <div className="panel-title">Verified by VibeMarket </div>
+              <a className="btn ghost" href="https://vibechain.com/market" target="_blank" rel="noreferrer">All</a>
+            </div>
+            <div className="cards">
+              {(verified.length ? verified : packs.slice(0,8)).map(pack => (
+                <PackSmall key={keyFor(pack)} pack={pack} />
+              ))}
+            </div>
+
+            <div className="panel" style={{marginTop:12}}>
+              <div className="panel-head">
+                <div className="panel-title">Quick Buy (token)</div>
+              </div>
+              <QuickBuy token={TNYL_TOKEN} />
+            </div>
+          </aside>
+        </div>
+
+        <div className="footer">
+          Built for the Vibe community • Prototype • <a href="https://vibechain.com/market" target="_blank" rel="noreferrer">VibeMarket</a> • Created by <a href="https://x.com/spawnizz" target="_blank" rel="noreferrer">@spawnizz</a>
+        </div>
+      </div>
+    </>
+  );
+}
+
+async function refreshTicker() {
+  try {
+    const recent = await wieldFetch(`vibe/boosterbox/recent?limit=100&includeMetadata=true&status=opened&rarityGreaterThan=2&chainId=${CHAIN_ID}`);
+    const items = (recent?.data || recent || []).map(x => ({
+      id: x.id ?? `${x.contractAddress}-${x.tokenId ?? Math.random()}`,
+      txt: `${short(x?.owner)} pulled ${rarityName(x?.rarity)} in ${x?.collectionName || short(x?.contractAddress)},
+    }));
+    setTicker(items);
+  } catch(e) { console.error(e); }
+}
+
+async function loadProfile(addr) {
+  if (!addr) return;
+  try {
+    // plats – byt till riktig endpoint när den är live
+    // ex: /vibe/owner/:address
+    alert("Profile endpoint to wire: /vibe/owner/:address (PNL, holdings)");
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+async function connectWallet() {
+  if (!window?.ethereum) return alert("No wallet found.");
+  const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
+  if (accounts?.length) setWallet(accounts[0]);
+}
+/* ========== UTILS ========== */
+function short(a) {
+  if (!a) return "—";
+  const s = String(a);
+  if (s.startsWith("0x") && s.length > 10) return `${s.slice(0,6)}…${s.slice(-4)}`;
+  if (s.includes("@")) return s;
+  return s;
+}
+
+function rarityName(r) {
+  if (r >= 4) return "LEGENDARY";
+  if (r === 3) return "EPIC";
+  if (r === 2) return "RARE";
+  return "COMMON";
+}
+
+function keyFor(p) {
+  return p?.id || `${p?.contractAddress || "x"}-${p?.tokenId || Math.random()}`;
+}
