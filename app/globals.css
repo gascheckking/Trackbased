@@ -1,5 +1,5 @@
 /* ====== RESET ====== */
-* { box-sizing: border-box; margin: 0; padding: 0; }
+{ box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; }
 body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
 
@@ -16,7 +16,6 @@ body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, A
   --green: #4ade80;
   --amber: #f59e0b;
 }
-
 @media (prefers-color-scheme: light) {
   :root {
     --bg: #f8fafc;
@@ -31,7 +30,6 @@ body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, A
     --amber: #b45309;
   }
 }
-
 body { background: var(--bg); color: var(--text); }
 
 /* ====== HEADER ====== */
@@ -59,7 +57,6 @@ body { background: var(--bg); color: var(--text); }
 .wrapper { padding: 16px; max-width: 1200px; margin: 0 auto; }
 .grid { display:grid; gap:16px; grid-template-columns: 1fr 320px; }
 @media (max-width: 980px){ .grid { grid-template-columns: 1fr; } }
-
 .panel {
   background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:12px;
 }
