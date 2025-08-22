@@ -272,12 +272,12 @@ export default function Page() {
 
 async function refreshTicker() {
   try {
-    const recent = await wieldFetch(`vibe/boosterbox/recent?limit=100&includeMetadata=true&status=opened&rarityGreaterThan=2&chainId=${CHAIN_ID}`);
-    const items = (recent?.data || recent || []).map(x => ({
+    const recentActivity = await wieldFetch(`vibe/boosterbox/recent?limit=100&includeMetadata=true&status=opened&rarityGreaterThan=2&chainId=${CHAIN_ID}`);
+    const activityItems = (recentActivity?.data || recentActivity || []).map(x => ({
       id: x.id ?? `${x.contractAddress}-${x.tokenId ?? Math.random()}`,
-      txt: `${short(x?.owner)} pulled ${rarityName(x?.rarity)} in ${x?.collectionName || short(x?.contractAddress)},
+      txt: `${short(x?.owner)} pulled ${rarityName(x?.rarity)} in ${x?.collectionName || short(x?.contractAddress)}`,
     }));
-    setTicker(items);
+    setTicker(activityItems);
   } catch(e) { console.error(e); }
 }
 
