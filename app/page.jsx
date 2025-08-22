@@ -103,4 +103,117 @@ export default function Page() {
 
       {/* Body */}
       <div className="wrapper">
-        <div className
+        <div className="grid">
+          <div>
+            {/* Switch View */}
+            {active === "Trading" && (
+              <section className="panel">
+                <div className="panel-head">
+                  <div className="panel-title">Pack Trading (Vibe-synced)</div>
+                  <div className="row">
+                    <input className="input" placeholder="Search packs/creators…" value={query} onChange={e=>setQuery(e.target.value)} />
+                    <a className="btn ghost" href="https://vibechain.com/market" target="_blank" rel="noreferrer">VibeMarket</a>
+                  </div>
+                </div>
+                {loading ? <div>Loading…</div> : <Grid packs={filtered} />}
+              </section>
+            )}
+
+            {active === "For Trade" && (
+              <section className="panel">
+                <div className="panel-head">
+                  <div className="panel-title">For Trade (showcase)</div>
+                  <div className="row">
+                    <span className="input">Coming soon – wallet-to-wallet swap</span>
+                  </div>
+                </div>
+                <div className="cards">
+                  <Placeholder text="Community showcase: users list specific cards for trade/bids." />
+                </div>
+              </section>
+            )}
+
+            {active === "Activity" && (
+              <section className="panel">
+                <div className="panel-head">
+                  <div className="panel-title">Recent Activity (opened ≥ EPIC)</div>
+                  <button className="btn" onClick={refreshTicker}>Refresh</button>
+                </div>
+                <div className="cards">
+                  {(ticker.length ? ticker : [{id:"y",txt:"No activity"}]).slice(0,30).map(i => (
+                    <div key={i.id} className="card">
+                      <div className="meta">
+                        <div className="title">{i.txt}</div>
+                        <div className="sub">pulled on Base • live</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {active === "Profile" && (
+              <section className="panel">
+                <div className="panel-head">
+                  <div className="panel-title">Your Profile</div>
+                  <div className="row">
+                    <input className="input" placeholder="0x… wallet" value={wallet} onChange={e=>setWallet(e.target.value)} />
+                    <button className="btn" onClick={() => loadProfile(wallet)}>Load</button>
+                  </div>
+                </div>
+                <div className="cards">
+                  <Placeholder text="PnL (realized/unrealized), most valuable card, holdings… (uses /owner/:address)" />
+                </div>
+              </section>
+            )}
+
+            {active === "Bubble" && (
+              <section className="panel">
+                <div className="panel-head"><div className="panel-title">Bubble Map</div></div>
+                <div className="cards">
+                  <Placeholder text="Wallet flow maps + chat. (Phase 2 – requires a small service)" />
+                </div>
+              </section>
+            )}
+
+            {active === "Chat" && (
+              <section className="panel">
+                <div className="panel-head"><div className="panel-title">Chat</div></div>
+                <div className="cards">
+                  <Placeholder text="Wallet-to-wallet / creator rooms. (Phase 2)" />
+                </div>
+              </section>
+            )}
+
+            {active === "Settings" && (
+              <section className="panel">
+                <div className="panel-head"><div className="panel-title">Settings</div></div>
+                <div className="row" style={{marginBottom:12}}>
+                  <button className="btn" onClick={() => setTheme(t => t === "dark" ? "light" : "dark")}>
+                    Toggle {theme === "dark" ? "Light" : "Dark"} Mode
+                  </button>
+                </div>
+                <div className="cards">
+                  <div className="card">
+                    <div className="meta">
+                      <div className="title">Chain</div>
+                      <div className="sub">Using Base (chainId {CHAIN_ID})</div>
+                    </div>
+                  </div>
+                  {!!TNYL_DROP && (
+                    <div className="card">
+                      <div className="meta">
+                        <div className="title">Tiny Legends Drop</div>
+                        <div className="sub">{TNYL_DROP}</div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </section>
+            )}
+          </div>
+
+          {/* Right column – Verified + Quick buys */}
+          <aside className="panel">
+            <div className="panel-head">
+              <div className="panel-title">Verified by VibeMarket
