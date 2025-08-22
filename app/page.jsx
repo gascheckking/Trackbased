@@ -284,9 +284,9 @@ async function refreshTicker() {
 async function loadProfile(addr) {
   if (!addr) return;
   try {
-    // plats – byt till riktig endpoint när den är live
-    // ex: /vibe/owner/:address
-    alert("Profile endpoint to wire: /vibe/owner/:address (PNL, holdings)");
+    const profileData = await wieldFetch(`vibe/owner/${addr}?chainId=${CHAIN_ID}`);
+    setBoughtItems(profileData?.boughtItems || []);
+    alert("Profile loaded successfully!");
   } catch (e) {
     console.error(e);
   }
