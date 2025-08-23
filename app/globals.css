@@ -119,14 +119,22 @@ body { background: var(--bg); color: var(--text); }
 /* ====== TICKER ====== */
 .ticker-wrap { overflow:hidden; border:1px solid var(--border); border-radius:12px; background:var(--panel); }
 .ticker {
-  display:flex; gap:24px; padding:10px; white-space:nowrap;
-  animation: scroll 30s linear infinite;
+  display:flex;
+  gap:24px;
+  padding:10px;
+  white-space:nowrap;
+  width:max-content;                 /* bredd = innehållets bredd */
+  will-change: transform;
+  animation: marquee 28s linear infinite;
 }
 .ticker .chip {
   background:var(--panel-2); border:1px solid var(--border); padding:6px 10px; border-radius:999px; font-size:12px;
 }
-@keyframes scroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
-@media (max-width: 480px){ .ticker { animation-duration: 18s; gap:16px; } }
+
+@keyframes marquee {
+  from { transform: translateX(100%); }   /* start helt till höger */
+  to   { transform: translateX(-100%); }  /* rulla hela vägen vänster */
+}
 
 /* ====== UTILS SOM KODEN ANVÄNDER ====== */
 .badge { font-size:12px; padding:2px 8px; border:1px solid var(--border); border-radius:999px; }
