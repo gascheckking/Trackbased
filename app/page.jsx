@@ -339,10 +339,22 @@ function connectWallet(setWallet) {
     try {
       if (!window?.ethereum) return alert("No wallet found");
       const accs = await window.ethereum.request({ method: "eth_requestAccounts" });
-      setWallet(accs?.[0] || "");
-    } catch (e) { console.error(e); }
+      if (!accs?.length) return;
+
+      // Om flera konton -> fråga användaren vilket
+      let chosen = accs[0];
+      if (accs.length > 1) {
+        const pick = prompt(`Multiple wallets found:\n${accs.join("\n")}\n\nEnter the full address you want to use:`);
+        if (pick && accs.includes(pick)) chosen = pick;
+      }
+
+      setWallet(chosen);
+    } catch (e) {
+      console.error(e);
+    }
   };
 }
+
 
 function refreshActivity(setTicker) {
   return async () => {
