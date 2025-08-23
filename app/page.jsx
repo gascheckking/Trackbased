@@ -1,11 +1,13 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { wieldFetch, CHAIN_ID, fmt } from "@/lib/wield";
+import { wieldFetch, CHAIN_ID } from "../lib/wield";
+
+
 
 const TNYL_DROP = process.env.NEXT_PUBLIC_TNYL_DROP || "";
 const TNYL_TOKEN = process.env.NEXT_PUBLIC_TNYL_TOKEN || "";
 
-const TABS = ["Trading","For Trade","Activity","Profile","Bubble","Chat","Settings","Bought"];
+const TABS = ["Trading", "For Trade", "Activity", "Profile", "Bubble", "Chat", "Settings", "Bought"];
 
 export default function Page() {
   const [active, setActive] = useState("Trading");
