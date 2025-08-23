@@ -1,16 +1,18 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { wieldFetch, CHAIN_ID, fmt } from "@/lib/wield";
-import { ethers } from "ethers";
 
-const TABS = ["Trading","For Trade","Activity","Profile","Bubble","Chat","Settings", "Bought"];
+const TNYL_DROP = process.env.NEXT_PUBLIC_TNYL_DROP || "";
+const TNYL_TOKEN = process.env.NEXT_PUBLIC_TNYL_TOKEN || "";
+
+const TABS = ["Trading","For Trade","Activity","Profile","Bubble","Chat","Settings","Bought"];
 
 export default function Page() {
   const [active, setActive] = useState("Trading");
+  const [loading, setLoading] = useState(false);
   const [packs, setPacks] = useState([]);
   const [verified, setVerified] = useState([]);
   const [ticker, setTicker] = useState([]);
-  const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState("");
   const [theme, setTheme] = useState("dark");
   const [wallet, setWallet] = useState("");
@@ -21,43 +23,41 @@ export default function Page() {
     document.documentElement.setAttribute("data-theme", theme);
   }, [theme]);
 
-  // Initial fetcher – Trading + Ticker
+  // Initial fetcher – Packs + Verified + Ticker (+Bought if wallet)
   useEffect(() => {
     (async () => {
       try {
         setLoading(true);
 
-        // Connect to provider
-        const provider = new ethers.JsonRpcProvider("https://base.llamarpc.com");
-        const signer = new ethers.Wallet(PRIVATE_KEY, provider);
+        // Packs (senaste boosterboxar)
+        const packsRes = await wieldFetch(`vibe/boosterbox/recent?limit=100&includeMetadata=true&chainId=${CHAIN_ID}`);
+        const packsList = packsRes?.data || packsRes || [];
+        setPacks(packsList);
 
-        // BoosterDropV2 contract
-        const boosterDrop = new ethers.Contract(
-          BOOSTER_DROP_ADDRESS,
-          IBoosterDropV2_ABI,
-          signer
-        );
+        // Verified-panel
+        const verifiedList = packsList.filter(p => p?.metadata?.verified === true);
+        setVerified(verifiedList.slice(0, 12));
 
-        // Fetch all packs
-        const packs = await boosterDrop.getAllPacks();
-        setPacks(packs);
-
-        // Fetch verified packs
-        const verified = packs.filter(p => (p?.metadata?.verified === true));
-        setVerified(verified.slice(0, 12));
-
-        // Fetch recent activity (opened pulls)
-        const recentActivity = await boosterDrop.getRecentActivity();
-        const activityItems = recentActivity.map(x => ({
+        // Activity för ticker (opened, rarity > 2 => EPIC/LEGENDARY)
+        const actRes = await wieldFetch(`vibe/boosterbox/recent?limit=100&includeMetadata=true&status=opened&rarityGreaterThan=2&chainId=${CHAIN_ID}`);
+        const actList = actRes?.data || actRes || [];
+        const activityItems = actList.map(x => ({
           id: x.id ?? `${x.contractAddress}-${x.tokenId ?? Math.random()}`,
-          txt: `${short(x?.owner)} pulled ${rarityName(x?.rarity)} in ${x?.collectionName || short(x?.contractAddress)}`,
+          txt: `${short(x?.owner)} pulled ${rarityName(x?.rarity)} in ${x?.collectionName || short(x?.contractAddress)}`
         }));
         setTicker(activityItems);
 
-        // Fetch bought items
-        const boughtItems = await boosterDrop.getBoughtItems(wallet);
-        setBoughtItems(boughtItems);
-
+        // Bought (feature-flag: prova om endpoint finns, annars tom lista)
+        if (wallet) {
+          try {
+            const profileData = await wieldFetch(`vibe/owner/${wallet}?chainId=${CHAIN_ID}`);
+            setBoughtItems(profileData?.boughtItems || []);
+          } catch {
+            setBoughtItems([]);
+          }
+        } else {
+          setBoughtItems([]);
+        }
       } catch (e) {
         console.error(e);
       } finally {
@@ -66,13 +66,15 @@ export default function Page() {
     })();
   }, [wallet]);
 
+  // Filtrering för Trading
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return packs;
-    return packs.filter(p =>
-      (p.collectionName || "").toLowerCase().includes(q) ||
-      (p.creator?.handle || "").toLowerCase().includes(q)
-    );
+    return (packs || []).filter(p => {
+      const creator = (p?.creator || "").toLowerCase();
+      const name = (p?.name || p?.collectionName || "").toLowerCase();
+      return creator.includes(q) || name.includes(q);
+    });
   }, [packs, query]);
 
   return (
@@ -87,7 +89,7 @@ export default function Page() {
           </div>
           <div className="row">
             <div className="wallet-chip">{wallet ? short(wallet) : "Not Connected"}</div>
-            <button className="btn" onClick={connectWallet}>Connect</button>
+            <button className="btn" onClick={connectWallet(setWallet)}>Connect</button>
             <button className="btn ghost" onClick={() => setTheme(t => t === "dark" ? "light" : "dark")}>
               {theme === "dark" ? "Light" : "Dark"}
             </button>
@@ -109,7 +111,7 @@ export default function Page() {
             {(ticker.length ? ticker : [{id:"x",txt:"Waiting for epic/legendary pulls…"}]).map(i => (
               <div key={i.id} className="chip"> {i.txt}</div>
             ))}
-            {/* Duplicate for seamless loop */}
+            {/* Duplicate för seamless loop */}
             {ticker.map(i => (
               <div key={i.id + "-dup"} className="chip"> {i.txt}</div>
             ))}
@@ -121,7 +123,7 @@ export default function Page() {
       <div className="wrapper">
         <div className="grid">
           <div>
-            {/* Switch View */}
+            {/* Trading */}
             {active === "Trading" && (
               <section className="panel">
                 <div className="panel-head">
@@ -135,6 +137,7 @@ export default function Page() {
               </section>
             )}
 
+            {/* For Trade */}
             {active === "For Trade" && (
               <section className="panel">
                 <div className="panel-head">
@@ -149,11 +152,12 @@ export default function Page() {
               </section>
             )}
 
+            {/* Activity – 30 senaste EPIC/LEGENDARY */}
             {active === "Activity" && (
               <section className="panel">
                 <div className="panel-head">
                   <div className="panel-title">Recent Activity (opened ≥ EPIC)</div>
-                  <button className="btn" onClick={refreshTicker}>Refresh</button>
+                  <button className="btn" onClick={refreshTicker(setTicker)}>Refresh</button>
                 </div>
                 <div className="cards">
                   {(ticker.length ? ticker : [{id:"y",txt:"No activity"}]).slice(0,30).map(i => (
@@ -168,13 +172,14 @@ export default function Page() {
               </section>
             )}
 
+            {/* Profile */}
             {active === "Profile" && (
               <section className="panel">
                 <div className="panel-head">
                   <div className="panel-title">Your Profile</div>
                   <div className="row">
                     <input className="input" placeholder="0x… wallet" value={wallet} onChange={e=>setWallet(e.target.value)} />
-                    <button className="btn" onClick={() => loadProfile(wallet)}>Load</button>
+                    <button className="btn" onClick={loadProfile(wallet, setBoughtItems)}>Load</button>
                   </div>
                 </div>
                 <div className="cards">
@@ -183,6 +188,7 @@ export default function Page() {
               </section>
             )}
 
+            {/* Bubble */}
             {active === "Bubble" && (
               <section className="panel">
                 <div className="panel-head"><div className="panel-title">Bubble Map</div></div>
@@ -192,6 +198,7 @@ export default function Page() {
               </section>
             )}
 
+            {/* Chat */}
             {active === "Chat" && (
               <section className="panel">
                 <div className="panel-head"><div className="panel-title">Chat</div></div>
@@ -201,6 +208,7 @@ export default function Page() {
               </section>
             )}
 
+            {/* Settings */}
             {active === "Settings" && (
               <section className="panel">
                 <div className="panel-head"><div className="panel-title">Settings</div></div>
@@ -228,21 +236,28 @@ export default function Page() {
               </section>
             )}
 
+            {/* Bought (feature-flag) */}
             {active === "Bought" && (
               <section className="panel">
                 <div className="panel-head">
                   <div className="panel-title">Bought Items</div>
                 </div>
-                <div className="cards">
-                  {boughtItems.map(item => (
-                    <div key={item.id} className="card">
-                      <div className="meta">
-                        <div className="title">{item.name}</div>
-                        <div className="sub">{item.description}</div>
+                {!wallet ? (
+                  <div className="card">Connect wallet först.</div>
+                ) : !boughtItems.length ? (
+                  <div className="card">Inga köp hittades (eller endpoint ej aktiv).</div>
+                ) : (
+                  <div className="cards">
+                    {boughtItems.map(item => (
+                      <div key={item.id || `${item.contract}-${item.tokenId}`} className="card">
+                        <div className="meta">
+                          <div className="title">{item.name || "Item"}</div>
+                          <div className="sub">{item.description || `#${item.tokenId ?? "–"}`}</div>
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </section>
             )}
           </div>
@@ -276,49 +291,127 @@ export default function Page() {
   );
 }
 
-async function refreshTicker() {
-  try {
-    const recentActivity = await wieldFetch(`vibe/boosterbox/recent?limit=100&includeMetadata=true&status=opened&rarityGreaterThan=2&chainId=${CHAIN_ID}`);
-    const activityItems = (recentActivity?.data || recentActivity || []).map(x => ({
-      id: x.id ?? `${x.contractAddress}-${x.tokenId ?? Math.random()}`,
-      txt: `${short(x?.owner)} pulled ${rarityName(x?.rarity)} in ${x?.collectionName || short(x?.contractAddress)}`,
-    }));
-    setTicker(activityItems);
-  } catch(e) { console.error(e); }
+/* ---------------- Helpers & småkomponenter ---------------- */
+
+function connectWallet(setWallet) {
+  return async () => {
+    try {
+      if (!window?.ethereum) return alert("No wallet found");
+      const accs = await window.ethereum.request({ method: "eth_requestAccounts" });
+      setWallet(accs?.[0] || "");
+    } catch (e) {
+      console.error(e);
+    }
+  };
 }
 
-async function loadProfile(addr) {
+function refreshTicker(setTicker) {
+  return async () => {
+    try {
+      const res = await wieldFetch(`vibe/boosterbox/recent?limit=100&includeMetadata=true&status=opened&rarityGreaterThan=2&chainId=${CHAIN_ID}`);
+      const list = res?.data || res || [];
+      const items = list.map(x => ({
+        id: x.id ?? `${x.contractAddress}-${x.tokenId ?? Math.random()}`,
+        txt: `${short(x?.owner)} pulled ${rarityName(x?.rarity)} in ${x?.collectionName || short(x?.contractAddress)}`
+      }));
+      setTicker(items);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+}
+
+async function loadProfile(addr, setBoughtItems) {
   if (!addr) return;
   try {
-    // plats – byt till riktig endpoint när den är live
-    // ex: /vibe/owner/:address
-    alert("Profile endpoint to wire: /vibe/owner/:address (PNL, holdings)");
+    // Byt till riktig endpoint när den är live:
+    // /vibe/owner/:address -> { pnl, holdings, boughtItems, ... }
+    const profileData = await wieldFetch(`vibe/owner/${addr}?chainId=${CHAIN_ID}`);
+    setBoughtItems(profileData?.boughtItems || []);
+    alert("Profile loaded.");
   } catch (e) {
     console.error(e);
+    alert("Profile endpoint to wire: /vibe/owner/:address (PNL, holdings)");
   }
 }
 
-async function connectWallet() {
-  if (!window?.ethereum) return alert("No wallet found.");
-  const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
-  if (accounts?.length) setWallet(accounts[0]);
-}
-/* ========== UTILS ========== */
-function short(a) {
-  if (!a) return "—";
-  const s = String(a);
-  if (s.startsWith("0x") && s.length > 10) return `${s.slice(0,6)}…${s.slice(-4)}`;
-  if (s.includes("@")) return s;
-  return s;
-}
-
 function rarityName(r) {
-  if (r >= 4) return "LEGENDARY";
-  if (r === 3) return "EPIC";
-  if (r === 2) return "RARE";
+  const n = String(r || "").toUpperCase();
+  if (["4","LEGENDARY"].includes(n)) return "LEGENDARY";
+  if (["3","EPIC"].includes(n)) return "EPIC";
+  if (["2","RARE"].includes(n)) return "RARE";
   return "COMMON";
 }
 
+function short(x = "") {
+  if (!x || typeof x !== "string") return "";
+  return x.length > 10 ? `${x.slice(0,6)}…${x.slice(-4)}` : x;
+}
+
 function keyFor(p) {
-  return p?.id || `${p?.contractAddress || "x"}-${p?.tokenId || Math.random()}`;
+  return p?.id || `${p?.contractAddress || "x"}-${p?.tokenId || p?.name || Math.random()}`;
+}
+
+/* ---- UI småkomponenter ---- */
+
+function Grid({ packs = [] }) {
+  if (!packs.length) return <div className="card">No packs found.</div>;
+  return (
+    <div className="cards">
+      {packs.map(p => <PackCard key={keyFor(p)} pack={p} />)}
+    </div>
+  );
+}
+
+function PackCard({ pack }) {
+  const name = pack?.name || pack?.collectionName || "Pack";
+  const creator = pack?.creator || "";
+  const img = pack?.image || pack?.metadata?.image || "";
+  const verified = pack?.metadata?.verified === true;
+  const link = pack?.url || pack?.metadata?.url || "https://vibechain.com/market";
+
+  return (
+    <a className="card pack" href={link} target="_blank" rel="noreferrer">
+      {img ? <img className="thumb lg" alt="" src={img} /> : <div className="thumb lg" style={{background:"var(--bg-1)"}} />}
+      <div className="meta">
+        <div className="title">{name} {verified && <span className="badge">VERIFIED</span>}</div>
+        <div className="sub">{short(creator)}</div>
+      </div>
+    </a>
+  );
+}
+
+function PackSmall({ pack }) {
+  const name = pack?.name || pack?.collectionName || "Pack";
+  const img = pack?.image || pack?.metadata?.image || "";
+  const link = pack?.url || pack?.metadata?.url || "https://vibechain.com/market";
+  return (
+    <a className="card row" href={link} target="_blank" rel="noreferrer">
+      {img ? <img className="thumb" alt="" src={img} /> : <div className="thumb" style={{background:"var(--bg-1)"}} />}
+      <div className="grow">
+        <div className="title truncate">{name}</div>
+        <div className="muted">View</div>
+      </div>
+    </a>
+  );
+}
+
+function QuickBuy({ token }) {
+  const isSet = !!token;
+  const href = isSet
+    ? `https://app.uniswap.org/#/swap?inputCurrency=ETH&outputCurrency=${token}&chain=base`
+    : "#";
+  return (
+    <div className="card">
+      <div className="meta">
+        <div className="title">Quick Buy</div>
+        <div className="sub">{isSet ? short(token) : "Set NEXT_PUBLIC_TNYL_TOKEN"}</div>
+      </div>
+      <a className={`btn ${!isSet ? "disabled":""}`} href={href} target="_blank" rel="noreferrer">Open Uniswap</a>
+    </div>
+  );
+}
+
+function Placeholder({ text }) {
+  return <div className="card">{text}</div>;
 }
