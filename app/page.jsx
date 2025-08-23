@@ -1,6 +1,11 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { wieldFetch, CHAIN_ID, usdNum } from "../lib/wield";
+import { wieldFetch, CHAIN_ID } from "../lib/wield";
+
+// Web3Modal hook to open the modal (QR / choose wallet)
+import { useWeb3Modal } from "@web3modal/react";
+// Wagmi hooks to read account and disconnect
+import { useAccount, useDisconnect } from "wagmi";
 
 const TABS = ["Trading", "For Trade", "Activity", "Profile", "Bubble", "Chat", "Settings", "Bought"];
 
@@ -18,23 +23,26 @@ export default function Page() {
   const [rarityFilter, setRarityFilter] = useState("ALL");
   const [verifiedOnly, setVerifiedOnly] = useState(false);
 
-  // profile / trade
+  // theme
   const [theme, setTheme] = useState("dark");
-  const [wallet, setWallet] = useState("");
-  const [boughtItems, setBoughtItems] = useState([]);
 
-  // Theme
+  // wallet via wagmi/web3modal
+  const { open } = useWeb3Modal();      // opens modal (browser/QR/phone)
+  const { address, isConnected } = useAccount(); // current wallet
+  const { disconnect } = useDisconnect();        // disconnect handler
+
+  // Theme switch
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
   }, [theme]);
 
-  // Initial fetcher
+  // Initial fetcher – Packs + Verified + Activity
   useEffect(() => {
     (async () => {
       try {
         setLoading(true);
 
-        // PACKS
+        // PACKS (marketplace)
         const packsRes = await wieldFetch(`vibe/boosterbox/recent?limit=120&includeMetadata=true&chainId=${CHAIN_ID}`);
         const packsList = packsRes?.data || packsRes || [];
         setPacks(packsList);
@@ -42,7 +50,7 @@ export default function Page() {
         const verifiedList = packsList.filter(p => p?.metadata?.verified === true);
         setVerified(verifiedList.slice(0, 18));
 
-        // ACTIVITY (pulls) – openings först, fallback opened
+        // ACTIVITY (pulls) – openings first, fallback to opened boxes
         let actList = [];
         try {
           const openings = await wieldFetch(`vibe/openings/recent?limit=60&includeMetadata=true&chainId=${CHAIN_ID}`);
@@ -51,56 +59,54 @@ export default function Page() {
           const fb = await wieldFetch(`vibe/boosterbox/recent?limit=120&includeMetadata=true&status=opened&chainId=${CHAIN_ID}`);
           actList = fb?.data || fb || [];
         }
-        setTicker(mapActivity(actList));
-
-        // PROFILE (köp) – feature-flag
-        if (wallet) {
-          try {
-            const profileData = await wieldFetch(`vibe/owner/${wallet}?chainId=${CHAIN_ID}`);
-            setBoughtItems(profileData?.boughtItems || []);
-          } catch {
-            setBoughtItems([]);
-          }
-        } else {
-          setBoughtItems([]);
-        }
+        const activityItems = actList.map(x => ({
+          id: x.id ?? `${x.contractAddress}-${x.tokenId ?? Math.random()}`,
+          owner: x.owner || x.to || "",
+          collection: x.collectionName || x.series || "Pack",
+          tokenId: x.tokenId ?? x.id ?? "—",
+          rarity: rarityName(x.rarity),
+          priceUsd: pickUsd(x),
+          image: x.image || x.metadata?.image,
+          ts: x.timestamp || x.time || Date.now()
+        }));
+        setTicker(activityItems);
+      } catch (e) {
+        console.error(e);
       } finally {
         setLoading(false);
       }
     })();
-  }, [wallet]);
+  }, []);
 
-  // Filter packs
+  // MARKET filters
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return (packs || []).filter(p => {
       const creator = (p?.creator || "").toLowerCase();
       const name = (p?.name || p?.collectionName || "").toLowerCase();
       const r = rarityName(p?.rarity || p?.metadata?.rarity || "");
-      const isVerified = p?.metadata?.verified === true;
+      const isVer = p?.metadata?.verified === true;
 
       const passQuery = !q || creator.includes(q) || name.includes(q);
-      const passVerified = !verifiedOnly || isVerified;
+      const passVerified = !verifiedOnly || isVer;
       const passRarity = rarityFilter === "ALL" || r === rarityFilter;
 
       return passQuery && passVerified && passRarity;
     });
   }, [packs, query, verifiedOnly, rarityFilter]);
 
-  // Verified creators (sort by highest valued pack seen)
+  // verified creators (simple)
   const verifiedCreators = useMemo(() => {
     const map = new Map();
     (packs || []).forEach(p => {
-      if (!p?.metadata?.verified) return;
-      const key = p.creator || p.creatorAddress || "unknown";
-      const value = usdNum(p);
-      const name = p?.name || p?.collectionName || "Pack";
-      const prev = map.get(key) || { creator: key, name: p.creator || key, count: 0, maxValue: 0, topName: "" };
-      prev.count += 1;
-      if (value > prev.maxValue) { prev.maxValue = value; prev.topName = name; }
-      map.set(key, prev);
+      if (p?.metadata?.verified) {
+        const key = p.creator || p.creatorAddress || "unknown";
+        const prev = map.get(key) || { creator: key, name: p.creator || key, count: 0 };
+        prev.count += 1;
+        map.set(key, prev);
+      }
     });
-    return [...map.values()].sort((a,b) => b.maxValue - a.maxValue).slice(0, 20);
+    return [...map.values()].sort((a,b) => b.count - a.count).slice(0, 12);
   }, [packs]);
 
   return (
@@ -113,16 +119,31 @@ export default function Page() {
             <div>VibeMarket <span style={{opacity:.7}}>Tracker</span></div>
             <div className="pill">VibePoints</div>
           </div>
+
           <div className="row">
-            <div className="wallet-chip">{wallet ? short(wallet) : "Not Connected"}</div>
-            <button className="btn" onClick={() => wallet ? setWallet("") : connectWallet(setWallet)()}>
-              {wallet ? "Disconnect" : "Connect"}
-            </button>
+            {/* Wallet chip */}
+            <div className="wallet-chip">
+              {isConnected ? short(address) : "Not Connected"}
+            </div>
+
+            {/* Connect / Disconnect */}
+            {isConnected ? (
+              <button className="btn" onClick={() => disconnect()}>
+                Disconnect
+              </button>
+            ) : (
+              <button className="btn" onClick={() => open()}>
+                Connect
+              </button>
+            )}
+
+            {/* Theme toggle */}
             <button className="btn ghost" onClick={() => setTheme(t => t === "dark" ? "light" : "dark")}>
               {theme === "dark" ? "Light" : "Dark"}
             </button>
           </div>
         </div>
+
         <div className="tabbar">
           {TABS.map(t => (
             <button key={t} className={`tab ${active === t ? "active":""}`} onClick={() => setActive(t)}>
@@ -135,14 +156,14 @@ export default function Page() {
       {/* Ticker */}
       <div className="wrapper">
         <div className="ticker-wrap panel">
-          <div className="ticker">
+          <div className="ticker ticker-rtl">
             {(ticker.length ? ticker : [{id:"x",owner:"someone",collection:"",tokenId:"",rarity:"",priceUsd:""}]).map(i => (
               <div key={i.id} className="chip">
                 {`${short(i.owner)} pulled ${i.rarity || ""} in ${i.collection || "—"} #${i.tokenId || "—"}${i.priceUsd ? ` (${i.priceUsd})` : ""}`}
               </div>
             ))}
             {ticker.map(i => (
-              <div key={`${i.id}-dup`} className="chip">
+              <div key={i.id + "-dup"} className="chip">
                 {`${short(i.owner)} pulled ${i.rarity || ""} in ${i.collection || "—"} #${i.tokenId || "—"}${i.priceUsd ? ` (${i.priceUsd})` : ""}`}
               </div>
             ))}
@@ -150,11 +171,10 @@ export default function Page() {
         </div>
       </div>
 
-      {/* Body */}
+      {/* Body (keep your sections; trimmed here to focus on wallet + lists) */}
       <div className="wrapper">
         <div className="grid">
           <div>
-            {/* Trading */}
             {active === "Trading" && (
               <section className="panel">
                 <div className="panel-head">
@@ -179,10 +199,6 @@ export default function Page() {
               </section>
             )}
 
-            {/* For Trade */}
-            {active === "For Trade" && (<ForTrade wallet={wallet} />)}
-
-            {/* Activity */}
             {active === "Activity" && (
               <section className="panel">
                 <div className="panel-head">
@@ -200,100 +216,19 @@ export default function Page() {
                       <div className="grow">
                         <div className="title">{short(i.owner)} pulled</div>
                         <div className="sub">
-                          <span className="linklike">{i.collection || "—"}</span> • #{i.tokenId || "—"}
+                          <span className="linklike">{i.collection}</span> • #{i.tokenId}
                           {" "}{rarityIcons(i.rarity)}{i.priceUsd ? ` (${i.priceUsd})` : ""}
                         </div>
                       </div>
-                      <div className="muted">{formatTime(i.ts)}</div>
+                      <div className="muted">{i.ts ? new Date(i.ts).toLocaleTimeString() : ""}</div>
                     </div>
                   ))}
                 </div>
               </section>
             )}
-
-            {/* Profile */}
-            {active === "Profile" && (
-              <section className="panel">
-                <div className="panel-head">
-                  <div className="panel-title">Your Profile</div>
-                  <div className="row">
-                    <input className="input" placeholder="0x… wallet" value={wallet} onChange={e=>setWallet(e.target.value)} />
-                    <button className="btn" onClick={() => loadProfile(wallet, setBoughtItems)}>Load</button>
-                  </div>
-                </div>
-                <div className="cards">
-                  <div className="card">PnL & holdings kopplas till <code>/vibe/owner/:address</code> när endpointen är öppen.</div>
-                </div>
-              </section>
-            )}
-
-            {/* Bubble */}
-            {active === "Bubble" && (
-              <section className="panel">
-                <div className="panel-head"><div className="panel-title">Bubble Map</div></div>
-                <div className="cards">
-                  <Placeholder text="Wallet flow maps + chat. (Phase 2 – requires a small service)" />
-                </div>
-              </section>
-            )}
-
-            {/* Chat */}
-            {active === "Chat" && (
-              <section className="panel">
-                <div className="panel-head"><div className="panel-title">Chat</div></div>
-                <div className="cards">
-                  <Placeholder text="Wallet-to-wallet / creator rooms. (Phase 2)" />
-                </div>
-              </section>
-            )}
-
-            {/* Settings */}
-            {active === "Settings" && (
-              <section className="panel">
-                <div className="panel-head"><div className="panel-title">Settings</div></div>
-                <div className="row" style={{marginBottom:12}}>
-                  <button className="btn" onClick={() => setTheme(t => t === "dark" ? "light" : "dark")}>
-                    Toggle {theme === "dark" ? "Light" : "Dark"} Mode
-                  </button>
-                </div>
-                <div className="cards">
-                  <div className="card">
-                    <div className="meta">
-                      <div className="title">Chain</div>
-                      <div className="sub">Using Base (chainId {CHAIN_ID})</div>
-                    </div>
-                  </div>
-                </div>
-              </section>
-            )}
-
-            {/* Bought */}
-            {active === "Bought" && (
-              <section className="panel">
-                <div className="panel-head">
-                  <div className="panel-title">Bought Items</div>
-                </div>
-                {!wallet ? (
-                  <div className="card">Connect wallet först.</div>
-                ) : !boughtItems.length ? (
-                  <div className="card">Inga köp hittades (eller endpoint ej aktiv).</div>
-                ) : (
-                  <div className="cards">
-                    {boughtItems.map(item => (
-                      <div key={item.id || `${item.contract}-${item.tokenId}`} className="card">
-                        <div className="meta">
-                          <div className="title">{item.name || "Item"}</div>
-                          <div className="sub">{item.description || `#${item.tokenId ?? "–"}`}</div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </section>
-            )}
           </div>
 
-          {/* Right column – Verified creators */}
+          {/* Right column – Verified + Creators */}
           <aside className="panel">
             <div className="panel-head">
               <div className="panel-title">Verified by VibeMarket</div>
@@ -332,29 +267,7 @@ export default function Page() {
   );
 }
 
-/* ---------------- Helpers & småkomponenter ---------------- */
-
-function connectWallet(setWallet) {
-  return async () => {
-    try {
-      if (!window?.ethereum) return alert("No wallet found");
-      const accs = await window.ethereum.request({ method: "eth_requestAccounts" });
-      if (!accs?.length) return;
-
-      // Om flera konton -> fråga användaren vilket
-      let chosen = accs[0];
-      if (accs.length > 1) {
-        const pick = prompt(`Multiple wallets found:\n${accs.join("\n")}\n\nEnter the full address you want to use:`);
-        if (pick && accs.includes(pick)) chosen = pick;
-      }
-
-      setWallet(chosen);
-    } catch (e) {
-      console.error(e);
-    }
-  };
-}
-
+/* ---------------- Helpers & small components ---------------- */
 
 function refreshActivity(setTicker) {
   return async () => {
@@ -367,21 +280,21 @@ function refreshActivity(setTicker) {
         const fb = await wieldFetch(`vibe/boosterbox/recent?limit=120&includeMetadata=true&status=opened&chainId=${CHAIN_ID}`);
         list = fb?.data || fb || [];
       }
-      setTicker(mapActivity(list));
-    } catch (e) { console.error(e); }
+      const items = list.map(x => ({
+        id: x.id ?? `${x.contractAddress}-${x.tokenId ?? Math.random()}`,
+        owner: x.owner || x.to || "",
+        collection: x.collectionName || x.series || "Pack",
+        tokenId: x.tokenId ?? x.id ?? "—",
+        rarity: rarityName(x.rarity),
+        priceUsd: pickUsd(x),
+        image: x.image || x.metadata?.image,
+        ts: x.timestamp || x.time || Date.now()
+      }));
+      setTicker(items);
+    } catch (e) {
+      console.error(e);
+    }
   };
-}
-
-async function loadProfile(addr, setBoughtItems) {
-  if (!addr) return;
-  try {
-    const profileData = await wieldFetch(`vibe/owner/${addr}?chainId=${CHAIN_ID}`);
-    setBoughtItems(profileData?.boughtItems || []);
-    alert("Profile loaded.");
-  } catch (e) {
-    console.error(e);
-    alert("Profile endpoint to wire: /vibe/owner/:address (PNL, holdings)");
-  }
 }
 
 function rarityName(r) {
@@ -406,30 +319,6 @@ function pickUsd(x) {
   if (Number.isNaN(num)) return "";
   return `$${num.toFixed(num >= 100 ? 0 : 2)}`;
 }
-function mapActivity(list) {
-  return (list || []).map(x => ({
-    id: x.id ?? `${x.contractAddress}-${x.tokenId ?? Math.random()}`,
-    owner: x.owner || x.to || "",
-    collection: x.collectionName || x.series || "Pack",
-    tokenId: x.tokenId ?? x.id ?? "—",
-    rarity: rarityName(x.rarity),
-    priceUsd: pickUsd(x),
-    image: x.image || x.metadata?.image,
-    ts: normalizeTs(x.timestamp || x.time),
-  }));
-}
-function normalizeTs(t) {
-  const n = Number(t);
-  if (Number.isFinite(n)) {
-    if (n > 1e12) return n;         // ms
-    if (n > 1e9)  return n * 1000;  // s -> ms
-  }
-  const d = Date.parse(t);
-  return Number.isFinite(d) ? d : Date.now();
-}
-function formatTime(ms) {
-  try { return new Date(ms).toLocaleTimeString(); } catch { return ""; }
-}
 function short(x = "") {
   if (!x || typeof x !== "string") return "";
   return x.length > 10 ? `${x.slice(0,6)}…${x.slice(-4)}` : x;
@@ -437,8 +326,6 @@ function short(x = "") {
 function keyFor(p) {
   return p?.id || `${p?.contractAddress || "x"}-${p?.tokenId || p?.name || Math.random()}`;
 }
-
-/* ---- UI ---- */
 
 function Grid({ packs = [] }) {
   if (!packs.length) return <div className="card">No packs found.</div>;
@@ -453,7 +340,7 @@ function PackCard({ pack }) {
   const name = pack?.name || pack?.collectionName || "Pack";
   const creator = pack?.creator || "";
   const img = pack?.image || pack?.metadata?.image || "";
-  const verified = pack?.metadata?.verified === true;
+  const isVerified = pack?.metadata?.verified === true;
   const link = pack?.url || pack?.metadata?.url || "https://vibechain.com/market";
   const rarity = rarityName(pack?.rarity || pack?.metadata?.rarity || "");
 
@@ -462,7 +349,16 @@ function PackCard({ pack }) {
       {img ? <img className="thumb lg" alt="" src={img} /> : <div className="thumb lg" style={{background:"var(--bg-1)"}} />}
       <div className="meta">
         <div className="row-between">
-          <div className="title">{name} {verified && <span className="badge">VERIFIED</span>}</div>
+          <div className="title" style={{display:"flex",alignItems:"center",gap:6}}>
+            {name}
+            {isVerified && (
+              <img
+                alt="verified"
+                src="https://vibechain.com/api/proxy?url=https%3A%2F%2Fwieldcd.net%2Fcdn-cgi%2Fimage%2Ffit%3Dcontain%2Cf%3Dauto%2Cw%3D168%2Fhttps%253A%252F%252Fvibechain.com%252Fvibemarket%252Fassets%252Ficons%252Fseal1.png"
+                style={{width:12,height:12}}
+              />
+            )}
+          </div>
           <span className="badge">{rarity}</span>
         </div>
         <div className="sub">{short(creator)}</div>
@@ -498,7 +394,6 @@ function PackSmall({ pack }) {
 }
 
 function QuickBuy() { return null; } // borttagen tills token används
-
 function Placeholder({ text }) { return <div className="card">{text}</div>; }
 
 /* -------- For Trade (lokal + auto-import från holdings) ---------- */
