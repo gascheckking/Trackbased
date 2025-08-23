@@ -418,6 +418,12 @@ function pickUsd(x) {
   if (Number.isNaN(num)) return "";
   return `$${num.toFixed(num >= 100 ? 0 : 2)}`;
 }
+// Numeriskt USD-värde från ett objekt (pack/card)
+function usdNum(x) {
+  const v = x?.usdPrice ?? x?.priceUsd ?? x?.price_usd ?? x?.priceUSD ?? x?.metadata?.usdPrice ?? null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
 
 function short(x = "") {
   if (!x || typeof x !== "string") return "";
