@@ -378,24 +378,24 @@ function refreshActivity(setTicker) {
         const openings = await wieldFetch(`vibe/openings/recent?limit=60&includeMetadata=true&chainId=${CHAIN_ID}`);
         list = openings?.data || openings || [];
       } catch {
-        const fallback = await wieldFetch(`vibe/boosterbox/recent?limit=120&includeMetadata=true&status=opened&chainId=${CHAIN_ID}`);
-        list = fallback?.data || fallback || [];
+        const fb = await wieldFetch(`vibe/boosterbox/recent?limit=120&includeMetadata=true&status=opened&chainId=${CHAIN_ID}`);
+        list = fb?.data || fb || [];
       }
       const items = list.map(x => ({
         id: x.id ?? `${x.contractAddress}-${x.tokenId ?? Math.random()}`,
-        rarity: rarityName(x?.rarity),
-        tokenId: x?.tokenId ?? x?.id ?? "—",
-        owner: x?.owner || x?.to || "",
-        collection: x?.collectionName || x?.series || "Pack",
-        image: x?.image || x?.metadata?.image,
-        ts: x?.timestamp || x?.time || Date.now()
+        owner: x.owner || x.to || "",
+        collection: x.collectionName || x.series || "Pack",
+        tokenId: x.tokenId ?? x.id ?? "—",
+        rarity: rarityName(x.rarity),
+        priceUsd: pickUsd(x),
+        image: x.image || x.metadata?.image,
+        ts: x.timestamp || x.time || Date.now(),
       }));
       setTicker(items);
-    } catch (e) {
-      console.error(e);
-    }
+    } catch (e) { console.error(e); }
   };
 }
+
 
 async function loadProfile(addr, setBoughtItems) {
   if (!addr) return;
