@@ -100,17 +100,36 @@ export default function Page() {
   }, [packs, query, verifiedOnly, rarityFilter]);
 
   // unika verified creators
-  const verifiedCreators = useMemo(() => {
+    const verifiedCreators = useMemo(() => {
     const map = new Map();
     (packs || []).forEach(p => {
-      if (p?.metadata?.verified) {
-        const key = p.creator || p.creatorAddress || "unknown";
-        const prev = map.get(key) || { creator: key, name: p.creator || key, count: 0 };
-        prev.count += 1;
-        map.set(key, prev);
+      const isVerified = p?.metadata?.verified === true;
+      if (!isVerified) return;
+
+      const creatorKey = p.creator || p.creatorAddress || "unknown";
+      const value = usdNum(p);
+      const name = p?.name || p?.collectionName || "Pack";
+
+      const prev = map.get(creatorKey) || { 
+        creator: creatorKey, 
+        name: p.creator || creatorKey, 
+        count: 0, 
+        maxValue: 0,
+        topName: ""
+      };
+
+      prev.count += 1;
+      if (value > prev.maxValue) {
+        prev.maxValue = value;
+        prev.topName = name;
       }
+      map.set(creatorKey, prev);
     });
-    return [...map.values()].sort((a,b) => b.count - a.count).slice(0, 12);
+
+    return [...map.values()]
+      .sort((a,b) => b.maxValue - a.maxValue)   // sortera på högsta värde
+      .slice(0, 20);
+
   }, [packs]);
 
   return (
