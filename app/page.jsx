@@ -2,12 +2,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { wieldFetch, CHAIN_ID } from "../lib/wield";
 
-const TNYL_DROP = process.env.NEXT_PUBLIC_TNYL_DROP || "";
-const TNYL_TOKEN = process.env.NEXT_PUBLIC_TNYL_TOKEN || "";
 const TABS = ["Trading", "For Trade", "Activity", "Profile", "Bubble", "Chat", "Settings", "Bought"];
 
 export default function Page() {
-  c  const [loading, setLoading] = useState(false);
+  const [active, setActive] = useState("Trading");
+  const [loading, setLoading] = useState(false);
 
   // marketplace data
   const [packs, setPacks] = useState([]);
@@ -44,26 +43,25 @@ export default function Page() {
         setVerified(verifiedList.slice(0, 18));
 
         // ACTIVITY (pulls) – openings först, fallback opened
-let actList = [];
-try {
-  const openings = await wieldFetch(`vibe/openings/recent?limit=60&includeMetadata=true&chainId=${CHAIN_ID}`);
-  actList = openings?.data || openings || [];
-} catch {
-  const fb = await wieldFetch(`vibe/boosterbox/recent?limit=120&includeMetadata=true&status=opened&chainId=${CHAIN_ID}`);
-  actList = fb?.data || fb || [];
-}
-const activityItems = actList.map(x => ({
-  id: x.id ?? `${x.contractAddress}-${x.tokenId ?? Math.random()}`,
-  owner: x.owner || x.to || "",
-  collection: x.collectionName || x.series || "Pack",
-  tokenId: x.tokenId ?? x.id ?? "—",
-  rarity: rarityName(x.rarity),
-  priceUsd: pickUsd(x),
-  image: x.image || x.metadata?.image,
-  ts: x.timestamp || x.time || Date.now(),
-}));
-setTicker(activityItems);
-
+        let actList = [];
+        try {
+          const openings = await wieldFetch(`vibe/openings/recent?limit=60&includeMetadata=true&chainId=${CHAIN_ID}`);
+          actList = openings?.data || openings || [];
+        } catch {
+          const fb = await wieldFetch(`vibe/boosterbox/recent?limit=120&includeMetadata=true&status=opened&chainId=${CHAIN_ID}`);
+          actList = fb?.data || fb || [];
+        }
+        const activityItems = actList.map(x => ({
+          id: x.id ?? `${x.contractAddress}-${x.tokenId ?? Math.random()}`,
+          owner: x.owner || x.to || "",
+          collection: x.collectionName || x.series || "Pack",
+          tokenId: x.tokenId ?? x.id ?? "—",
+          rarity: rarityName(x.rarity),
+          priceUsd: pickUsd(x),
+          image: x.image || x.metadata?.image,
+          ts: x.timestamp || x.time || Date.now(),
+        }));
+        setTicker(activityItems);
 
         // PROFILE (köp) – feature-flag
         if (wallet) {
@@ -194,8 +192,8 @@ setTicker(activityItems);
               <ForTrade wallet={wallet} />
             )}
 
-                        {/* Activity – Recent pulls list */}
-                        {active === "Activity" && (
+            {/* Activity – Recent pulls list */}
+            {active === "Activity" && (
               <section className="panel">
                 <div className="panel-head">
                   <div className="panel-title">Recent Pulls</div>
@@ -222,8 +220,6 @@ setTicker(activityItems);
                 </div>
               </section>
             )}
-
-
 
             {/* Profile */}
             {active === "Profile" && (
@@ -277,14 +273,6 @@ setTicker(activityItems);
                       <div className="sub">Using Base (chainId {CHAIN_ID})</div>
                     </div>
                   </div>
-                  {!!TNYL_DROP && (
-                    <div className="card">
-                      <div className="meta">
-                        <div className="title">Tiny Legends Drop</div>
-                        <div className="sub">{TNYL_DROP}</div>
-                      </div>
-                    </div>
-                  )}
                 </div>
               </section>
             )}
@@ -315,7 +303,7 @@ setTicker(activityItems);
             )}
           </div>
 
-          {/* Right column – Verified creators + Quick buy */}
+          {/* Right column – Verified creators */}
           <aside className="panel">
             <div className="panel-head">
               <div className="panel-title">Verified by VibeMarket</div>
@@ -342,13 +330,6 @@ setTicker(activityItems);
                   </div>
                 )) : <div className="card">No verified creators found.</div>}
               </div>
-            </div>
-
-            <div className="panel" style={{marginTop:12}}>
-              <div className="panel-head">
-                <div className="panel-title">Quick Buy (token)</div>
-              </div>
-              <QuickBuy token={TNYL_TOKEN} />
             </div>
           </aside>
         </div>
@@ -401,7 +382,6 @@ function refreshActivity(setTicker) {
   };
 }
 
-
 async function loadProfile(addr, setBoughtItems) {
   if (!addr) return;
   try {
@@ -422,6 +402,7 @@ function rarityName(r) {
   if (["1","COMMON"].includes(n)) return "COMMON";
   return (["COMMON","RARE","EPIC","LEGENDARY"].includes(n) ? n : "COMMON");
 }
+
 function rarityIcons(r) {
   const n = rarityName(r);
   if (n === "LEGENDARY") return " ★★★★";
@@ -437,7 +418,6 @@ function pickUsd(x) {
   if (Number.isNaN(num)) return "";
   return `$${num.toFixed(num >= 100 ? 0 : 2)}`;
 }
-
 
 function short(x = "") {
   if (!x || typeof x !== "string") return "";
@@ -493,22 +473,6 @@ function PackSmall({ pack }) {
         <div className="muted">View</div>
       </div>
     </a>
-  );
-}
-
-function QuickBuy({ token }) {
-  const isSet = !!token;
-  const href = isSet
-    ? `https://app.uniswap.org/#/swap?inputCurrency=ETH&outputCurrency=${token}&chain=base`
-    : "#";
-  return (
-    <div className="card">
-      <div className="meta">
-        <div className="title">Quick Buy</div>
-        <div className="sub">{isSet ? short(token) : "Set NEXT_PUBLIC_TNYL_TOKEN"}</div>
-      </div>
-      <a className={`btn ${!isSet ? "disabled":""}`} href={href} target="_blank" rel="noreferrer">Open Uniswap</a>
-    </div>
   );
 }
 
