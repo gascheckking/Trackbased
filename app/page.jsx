@@ -195,7 +195,7 @@ setTicker(activityItems);
             )}
 
                         {/* Activity – Recent pulls list */}
-            {active === "Activity" && (
+                        {active === "Activity" && (
               <section className="panel">
                 <div className="panel-head">
                   <div className="panel-title">Recent Pulls</div>
@@ -222,6 +222,7 @@ setTicker(activityItems);
                 </div>
               </section>
             )}
+
 
 
             {/* Profile */}
