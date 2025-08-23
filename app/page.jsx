@@ -490,29 +490,32 @@ function PackSmall({ pack }) {
   const name = pack?.name || pack?.collectionName || "Pack";
   const img = pack?.image || pack?.metadata?.image || "";
   const link = pack?.url || pack?.metadata?.url || "https://vibechain.com/market";
-  return (
-    <a className="card row" href={link} target="_blank" rel="noreferrer">
-  {img ? (
-    <img className="thumb" alt="" src={img} />
-  ) : (
-    <div className="thumb" style={{background:"var(--bg-1)"}} />
-  )}
-  <div className="grow">
-    <div className="title truncate" style={{display:"flex",alignItems:"center",gap:6}}>
-      {name}
-      {isVerified && (
-        <img
-          alt="verified"
-          src="https://vibechain.com/api/proxy?url=https%3A%2F%2Fwieldcd.net%2Fcdn-cgi%2Fimage%2Ffit%3Dcontain%2Cf%3Dauto%2Cw%3D168%2Fhttps%253A%252F%252Fvibechain.com%252Fvibemarket%252Fassets%252Ficons%252Fseal1.png"
-          style={{width:12,height:12}}
-        />
-      )}
-    </div>
-    <div className="muted">View</div>
-  </div>
-</a>
+const isVerified = pack?.metadata?.verified === true;
 
-  );
+return (
+  <a className="card row" href={link} target="_blank" rel="noreferrer">
+    {img ? (
+      <img className="thumb" alt="" src={img} />
+    ) : (
+      <div className="thumb" style={{background:"var(--bg-1)"}} />
+    )}
+    <div className="grow">
+      <div className="title truncate" style={{display:"flex",alignItems:"center",gap:6}}>
+        {name}
+        {isVerified && (
+          <img
+            alt="verified"
+            src="https://vibechain.com/api/proxy?url=https%3A%2F%2Fwieldcd.net%2Fcdn-cgi%2Fimage%2Ffit%3Dcontain%2Cf%3Dauto%2Cw%3D168%2Fhttps%253A%252F%252Fvibechain.com%252Fvibemarket%252Fassets%252Ficons%252Fseal1.png"
+            style={{width:12,height:12}}
+          />
+        )}
+      </div>
+      <div className="muted">View</div>
+    </div>
+  </a>
+);
+``` ✅
+
 }
 
 function Placeholder({ text }) {
