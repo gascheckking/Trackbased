@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { wieldFetch, CHAIN_ID } from "../lib/wield";
 
-const TABS = ["Trading", "For Trade", "Activity", "Profile", "Bubble", "Chat", "Settings", "Bought"];
+const TABS = ["Trading", "For Trade", "Activity", "Profile", "Bubble", "Chat", "Bought"];
 
 export default function Page() {
   const [active, setActive] = useState("Trading");
@@ -15,7 +15,7 @@ export default function Page() {
 
   // filters
   const [query, setQuery] = useState("");
-  const [rarityFilter, setRarityFilter] = useState("ALL");
+  const [rarityFilter, setRarityFilter] = useState("ALL"); // ALL|COMMON|RARE|EPIC|LEGENDARY
   const [verifiedOnly, setVerifiedOnly] = useState(false);
 
   // profile / trade
@@ -35,12 +35,12 @@ export default function Page() {
         setLoading(true);
 
         // PACKS (marketplace)
-        const packsRes = await wieldFetch(`vibe/boosterbox/recent?limit=120&includeMetadata=true&chainId=${CHAIN_ID}`);
+        const packsRes = await wieldFetch(`vibe/boosterbox/recent?limit=200&includeMetadata=true&chainId=${CHAIN_ID}`);
         const packsList = packsRes?.data || packsRes || [];
         setPacks(packsList);
 
         const verifiedList = packsList.filter(p => p?.metadata?.verified === true);
-        setVerified(verifiedList.slice(0, 18));
+        setVerified(verifiedList.slice(0, 24));
 
         // ACTIVITY (pulls) – openings först, fallback opened
         let actList = [];
@@ -51,20 +51,16 @@ export default function Page() {
           const fb = await wieldFetch(`vibe/boosterbox/recent?limit=160&includeMetadata=true&status=opened&chainId=${CHAIN_ID}`);
           actList = fb?.data || fb || [];
         }
-        const activityItems = (actList || []).map(x => {
-          const collection = x?.collectionName || x?.series || x?.metadata?.collectionName || "—";
-          const tokenId   = x?.tokenId ?? x?.id ?? "—";
-          const rarity    = rarityName(x?.rarity);
-          const image     = x?.image || x?.metadata?.image || "";
-          const owner     = x?.owner || x?.to || "";
-          const ts        = x?.timestamp || x?.time || Date.now();
-          return {
-            id: x?.id ?? `${x?.contractAddress || "x"}-${tokenId}-${Math.random()}`,
-            owner, collection, tokenId, rarity,
-            priceUsd: pickUsd(x),
-            image, ts
-          };
-        });
+        const activityItems = actList.map(x => ({
+          id: x.id ?? `${x.contractAddress}-${x.tokenId ?? Math.random()}`,
+          owner: x.owner || x.to || x.user || "",
+          collection: x.collectionName || x.series || x.collection || "Pack",
+          tokenId: x.tokenId ?? x.cardId ?? x.id ?? "—",
+          rarity: rarityName(x.rarity || x.metadata?.rarity),
+          priceUsd: pickUsd(x),
+          image: x.image || x.metadata?.image || x.cardImage,
+          ts: toMillis(x.timestamp || x.time || x.blockTime),
+        }));
         setTicker(activityItems);
 
         // PROFILE (köp) – feature-flag
@@ -103,18 +99,19 @@ export default function Page() {
     });
   }, [packs, query, verifiedOnly, rarityFilter]);
 
-  // Verified creators – sorterat på deras mest värdefulla pack/card (USD)
+  // Verified creators rankade på högsta USD-värde bland deras pack
   const verifiedCreators = useMemo(() => {
     const map = new Map();
     (packs || []).forEach(p => {
       if (!p?.metadata?.verified) return;
-      const creatorKey = p.creator || p.creatorAddress || "unknown";
+      const key = p.creator || p.creatorAddress || "unknown";
       const value = usdNum(p);
-      const name = p?.name || p?.collectionName || "Pack";
-      const prev = map.get(creatorKey) || { creator: creatorKey, name: p.creator || creatorKey, count: 0, maxValue: 0, topName: "" };
+      const display = p.creator || key;
+      const packName = p?.name || p?.collectionName || "Pack";
+      const prev = map.get(key) || { creator: key, name: display, count: 0, maxValue: 0, topName: "" };
       prev.count += 1;
-      if (value > prev.maxValue) { prev.maxValue = value; prev.topName = name; }
-      map.set(creatorKey, prev);
+      if (value > prev.maxValue) { prev.maxValue = value; prev.topName = packName; }
+      map.set(key, prev);
     });
     return [...map.values()].sort((a,b) => b.maxValue - a.maxValue).slice(0, 20);
   }, [packs]);
@@ -131,7 +128,10 @@ export default function Page() {
           </div>
           <div className="row">
             <div className="wallet-chip">{wallet ? short(wallet) : "Not Connected"}</div>
-            <button className="btn" onClick={() => handleWallet(setWallet, wallet)}>
+            <button
+              className="btn"
+              onClick={() => (wallet ? setWallet("") : connectWallet(setWallet))()}
+            >
               {wallet ? "Disconnect" : "Connect"}
             </button>
             <button className="btn ghost" onClick={() => setTheme(t => t === "dark" ? "light" : "dark")}>
@@ -152,14 +152,14 @@ export default function Page() {
       <div className="wrapper">
         <div className="ticker-wrap panel">
           <div className="ticker">
-            {(ticker.length ? ticker : [{id:"x",owner:"",collection:"—",tokenId:"—",rarity:"",priceUsd:""}]).map(i => (
+            {(ticker.length ? ticker : [{id:"x",owner:"someone",collection:"",tokenId:"",rarity:"",ts:Date.now()}]).map(i => (
               <div key={i.id} className="chip">
-                {`${short(i.owner) || "someone"} pulled ${i.collection} #${i.tokenId} ${rarityIcons(i.rarity)}${i.priceUsd ? ` (${i.priceUsd})` : ""}`}
+                {`${short(i.owner)} pulled ${i.collection || "—"} #${i.tokenId} ${rarityIcons(i.rarity)}${i.priceUsd ? ` (${i.priceUsd})` : ""}`}
               </div>
             ))}
             {ticker.map(i => (
               <div key={i.id + "-dup"} className="chip">
-                {`${short(i.owner) || "someone"} pulled ${i.collection} #${i.tokenId} ${rarityIcons(i.rarity)}${i.priceUsd ? ` (${i.priceUsd})` : ""}`}
+                {`${short(i.owner)} pulled ${i.collection || "—"} #${i.tokenId} ${rarityIcons(i.rarity)}${i.priceUsd ? ` (${i.priceUsd})` : ""}`}
               </div>
             ))}
           </div>
@@ -196,9 +196,7 @@ export default function Page() {
             )}
 
             {/* For Trade */}
-            {active === "For Trade" && (
-              <ForTrade wallet={wallet} />
-            )}
+            {active === "For Trade" && <ForTrade wallet={wallet} />}
 
             {/* Activity – Recent pulls list */}
             {active === "Activity" && (
@@ -208,7 +206,7 @@ export default function Page() {
                   <button className="btn" onClick={refreshActivity(setTicker)}>Refresh</button>
                 </div>
                 <div className="cards" style={{gridTemplateColumns:"1fr"}}>
-                  {(ticker.length ? ticker : [{id:"y"}]).slice(0,50).map(i => (
+                  {(ticker.length ? ticker : [{id:"y"}]).slice(0,60).map(i => (
                     <div key={i.id} className="card row" style={{padding:10}}>
                       {i.image ? (
                         <img className="thumb" alt="" src={i.image} style={{width:40,height:40,borderRadius:8}} />
@@ -216,9 +214,9 @@ export default function Page() {
                         <div className="thumb" style={{width:40,height:40,borderRadius:8}} />
                       )}
                       <div className="grow">
-                        <div className="title">{short(i.owner) || "someone"} pulled</div>
+                        <div className="title">{short(i.owner)} pulled</div>
                         <div className="sub">
-                          <span className="linklike">{i.collection || "—"}</span> • #{i.tokenId || "—"}
+                          <span className="linklike">{i.collection || "—"}</span> • #{i.tokenId}
                           {" "}{rarityIcons(i.rarity)}{i.priceUsd ? ` (${i.priceUsd})` : ""}
                         </div>
                       </div>
@@ -261,26 +259,6 @@ export default function Page() {
                 <div className="panel-head"><div className="panel-title">Chat</div></div>
                 <div className="cards">
                   <Placeholder text="Wallet-to-wallet / creator rooms. (Phase 2)" />
-                </div>
-              </section>
-            )}
-
-            {/* Settings */}
-            {active === "Settings" && (
-              <section className="panel">
-                <div className="panel-head"><div className="panel-title">Settings</div></div>
-                <div className="row" style={{marginBottom:12}}>
-                  <button className="btn" onClick={() => setTheme(t => t === "dark" ? "light" : "dark")}>
-                    Toggle {theme === "dark" ? "Light" : "Dark"} Mode
-                  </button>
-                </div>
-                <div className="cards">
-                  <div className="card">
-                    <div className="meta">
-                      <div className="title">Chain</div>
-                      <div className="sub">Using Base (chainId {CHAIN_ID})</div>
-                    </div>
-                  </div>
                 </div>
               </section>
             )}
@@ -334,7 +312,7 @@ export default function Page() {
                       <div className="title truncate">{c.name}</div>
                       <div className="muted">{c.creator}</div>
                     </div>
-                    <div className="badge">{c.count}</div>
+                    <div className="badge">{c.maxValue ? `$${c.maxValue.toFixed(0)}` : c.count}</div>
                   </div>
                 )) : <div className="card">No verified creators found.</div>}
               </div>
@@ -352,15 +330,23 @@ export default function Page() {
 
 /* ---------------- Helpers & småkomponenter ---------------- */
 
-async function handleWallet(setWallet, wallet) {
-  try {
-    if (wallet) { setWallet(""); return; } // disconnect
-    if (!window?.ethereum) return alert("No wallet found");
-    const accs = await window.ethereum.request({ method: "eth_requestAccounts" });
-    setWallet(accs?.[0] || "");
-  } catch (e) {
-    console.error(e);
-  }
+function connectWallet(setWallet) {
+  return async () => {
+    try {
+      if (!window?.ethereum) return alert("No wallet found");
+      // ge användaren val av konto
+      try {
+        await window.ethereum.request({
+          method: "wallet_requestPermissions",
+          params: [{ eth_accounts: {} }],
+        });
+      } catch {}
+      const accs = await window.ethereum.request({ method: "eth_requestAccounts" });
+      setWallet(accs?.[0] || "");
+    } catch (e) {
+      console.error(e);
+    }
+  };
 }
 
 function refreshActivity(setTicker) {
@@ -374,20 +360,16 @@ function refreshActivity(setTicker) {
         const fb = await wieldFetch(`vibe/boosterbox/recent?limit=160&includeMetadata=true&status=opened&chainId=${CHAIN_ID}`);
         list = fb?.data || fb || [];
       }
-      const items = (list || []).map(x => {
-        const collection = x?.collectionName || x?.series || x?.metadata?.collectionName || "—";
-        const tokenId   = x?.tokenId ?? x?.id ?? "—";
-        return {
-          id: x?.id ?? `${x?.contractAddress || "x"}-${tokenId}-${Math.random()}`,
-          owner: x?.owner || x?.to || "",
-          collection,
-          tokenId,
-          rarity: rarityName(x?.rarity),
-          priceUsd: pickUsd(x),
-          image: x?.image || x?.metadata?.image || "",
-          ts: x?.timestamp || x?.time || Date.now(),
-        };
-      });
+      const items = list.map(x => ({
+        id: x.id ?? `${x.contractAddress}-${x.tokenId ?? Math.random()}`,
+        owner: x.owner || x.to || x.user || "",
+        collection: x.collectionName || x.series || x.collection || "Pack",
+        tokenId: x.tokenId ?? x.cardId ?? x.id ?? "—",
+        rarity: rarityName(x.rarity || x.metadata?.rarity),
+        priceUsd: pickUsd(x),
+        image: x.image || x.metadata?.image || x.cardImage,
+        ts: toMillis(x.timestamp || x.time || x.blockTime),
+      }));
       setTicker(items);
     } catch (e) { console.error(e); }
   };
@@ -415,23 +397,28 @@ function rarityName(r) {
 }
 function rarityIcons(r) {
   const n = rarityName(r);
-  if (n === "LEGENDARY") return "★★★★";
-  if (n === "EPIC")      return "★★★";
-  if (n === "RARE")      return "★★";
-  return "★";
+  if (n === "LEGENDARY") return " ★★★★";
+  if (n === "EPIC")      return " ★★★";
+  if (n === "RARE")      return " ★★";
+  return " ★";
 }
 function pickUsd(x) {
   const val = x?.usdPrice ?? x?.priceUsd ?? x?.price_usd ?? x?.priceUSD ?? x?.metadata?.usdPrice ?? null;
-  if (val == null) return "";
   const num = Number(val);
-  if (!Number.isFinite(num)) return "";
-  return `$${num.toFixed(num >= 100 ? 0 : 2)}`;
+  return Number.isFinite(num) ? `$${num.toFixed(num >= 100 ? 0 : 2)}` : "";
 }
 function usdNum(x) {
   const v = x?.usdPrice ?? x?.priceUsd ?? x?.price_usd ?? x?.priceUSD ?? x?.metadata?.usdPrice ?? null;
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
 }
+function toMillis(t) {
+  if (!t) return Date.now();
+  const n = Number(t);
+  if (Number.isFinite(n) && n < 1e12) return n * 1000; // sec → ms
+  return Number.isFinite(n) ? n : Date.parse(t);
+}
+
 function short(x = "") {
   if (!x || typeof x !== "string") return "";
   return x.length > 10 ? `${x.slice(0,6)}…${x.slice(-4)}` : x;
@@ -481,11 +468,7 @@ function PackSmall({ pack }) {
 
   return (
     <a className="card row" href={link} target="_blank" rel="noreferrer">
-      {img ? (
-        <img className="thumb" alt="" src={img} />
-      ) : (
-        <div className="thumb" style={{background:"var(--bg-1)"}} />
-      )}
+      {img ? (<img className="thumb" alt="" src={img} />) : (<div className="thumb" style={{background:"var(--bg-1)"}} />)}
       <div className="grow">
         <div className="title truncate" style={{display:"flex",alignItems:"center",gap:6}}>
           {name}
@@ -503,9 +486,9 @@ function PackSmall({ pack }) {
   );
 }
 
-function QuickBuy() { return null; } // (inte används just nu)
-
-function Placeholder({ text }) { return <div className="card">{text}</div>; }
+function Placeholder({ text }) {
+  return <div className="card">{text}</div>;
+}
 
 /* -------- For Trade (lokal + auto-import från holdings) ---------- */
 
@@ -530,10 +513,10 @@ function ForTrade({ wallet }) {
     try {
       const res = await wieldFetch(`vibe/owner/${wallet}?chainId=${CHAIN_ID}`);
       const holdings = res?.holdings || res?.cards || [];
-      const mapped = (holdings || []).map(h => ({
+      const mapped = holdings.map(h => ({
         id: `${h.contract || h.address}-${h.tokenId || h.id}-${Math.random()}`,
         name: h.name || h.series || "Item",
-        rarity: rarityName(h?.rarity),
+        rarity: rarityName(h.rarity),
         contract: h.contract || h.address || "",
         tokenId: h.tokenId || h.id || "",
         notes: ""
