@@ -44,25 +44,27 @@ export default function Page() {
         const verifiedList = packsList.filter(p => p?.metadata?.verified === true);
         setVerified(verifiedList.slice(0, 18));
 
-        // ACTIVITY (pulls) – försök openings först, fallback till boosterbox status=opened
-        let actList = [];
-        try {
-          const openings = await wieldFetch(`vibe/openings/recent?limit=60&includeMetadata=true&chainId=${CHAIN_ID}`);
-          actList = openings?.data || openings || [];
-        } catch {
-          const fallback = await wieldFetch(`vibe/boosterbox/recent?limit=120&includeMetadata=true&status=opened&chainId=${CHAIN_ID}`);
-          actList = fallback?.data || fallback || [];
-        }
-        const activityItems = actList.map(x => ({
-          id: x.id ?? `${x.contractAddress}-${x.tokenId ?? Math.random()}`,
-          rarity: rarityName(x?.rarity),
-          tokenId: x?.tokenId ?? x?.id ?? "—",
-          owner: x?.owner || x?.to || "",
-          collection: x?.collectionName || x?.series || "Pack",
-          image: x?.image || x?.metadata?.image,
-          ts: x?.timestamp || x?.time || Date.now()
-        }));
-        setTicker(activityItems);
+        // ACTIVITY (pulls) – openings först, fallback opened
+let actList = [];
+try {
+  const openings = await wieldFetch(`vibe/openings/recent?limit=60&includeMetadata=true&chainId=${CHAIN_ID}`);
+  actList = openings?.data || openings || [];
+} catch {
+  const fb = await wieldFetch(`vibe/boosterbox/recent?limit=120&includeMetadata=true&status=opened&chainId=${CHAIN_ID}`);
+  actList = fb?.data || fb || [];
+}
+const activityItems = actList.map(x => ({
+  id: x.id ?? `${x.contractAddress}-${x.tokenId ?? Math.random()}`,
+  owner: x.owner || x.to || "",
+  collection: x.collectionName || x.series || "Pack",
+  tokenId: x.tokenId ?? x.id ?? "—",
+  rarity: rarityName(x.rarity),
+  priceUsd: pickUsd(x),
+  image: x.image || x.metadata?.image,
+  ts: x.timestamp || x.time || Date.now(),
+}));
+setTicker(activityItems);
+
 
         // PROFILE (köp) – feature-flag
         if (wallet) {
