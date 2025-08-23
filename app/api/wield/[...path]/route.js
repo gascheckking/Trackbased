@@ -1,71 +1,35 @@
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
+// Serverless-proxy till upstream-API:t (förhindrar CORS + döljer nyckel)
+import { NextResponse } from "next/server";
 
-/**
- * Liten hjälpare: proxya mot Wield
- */
-async function proxy(req, { params }, method = "GET") {
-  const key = process.env.WIELD_API_KEY || "";
-  if (!key) {
-    return new Response(JSON.stringify({ ok: false, error: "Missing WIELD_API_KEY" }), {
-      status: 500,
-      headers: { "content-type": "application/json", "cache-control": "no-store" }
-    });
-  }
+const UPSTREAM = "https://vibechain.com/api/"; // <— använder Vibe API-proxy
 
-  const parts = Array.isArray(params?.path) ? params.path : [];
-  const suffix = req.nextUrl?.search || "";
-  const upstream = `https://build.wield.xyz/${parts.join("/")}${suffix}`;
-
-  const init = {
-    method,
-    headers: {
-      "x-api-key": key,
-      // Forwarda content-type bara vid POST/PUT/PATCH
-      ...(method !== "GET" && { "content-type": req.headers.get("content-type") || "application/json" })
-    },
-    // vid skrivande metoder, vidarebefordra body
-    ...(method !== "GET" ? { body: await req.text() } : undefined),
-    // undvik edge-caching på mellanlagren
-    next: { revalidate: 0 }
-  };
-
-  const r = await fetch(upstream, init);
-  const bodyText = await r.text();
-  const contentType = r.headers.get("content-type") || "application/json";
-
-  return new Response(bodyText, {
-    status: r.status,
-    headers: {
-      "content-type": contentType,
-      "cache-control": "no-store"
-    }
-  });
+export async function GET(req, { params }) {
+  return proxy(req, params);
+}
+export async function POST(req, { params }) {
+  return proxy(req, params);
 }
 
-export async function GET(req, ctx) {
+async function proxy(req, params) {
   try {
-    return await proxy(req, ctx, "GET");
-  } catch (e) {
-    return new Response(JSON.stringify({ ok: false, error: e.message }), {
-      status: 500,
-      headers: { "content-type": "application/json", "cache-control": "no-store" }
+    const path = Array.isArray(params.path) ? params.path.join("/") : "";
+    const url = new URL(req.url);
+    const target = `${UPSTREAM}${path}${url.search || ""}`;
+
+    const res = await fetch(target, {
+      method: req.method,
+      headers: {
+        "x-api-key": process.env.WIELD_API_KEY || "",
+      },
+      body: ["GET", "HEAD"].includes(req.method) ? undefined : await req.arrayBuffer(),
+      cache: "no-store",
     });
+
+    const ct = res.headers.get("content-type") || "";
+    const init = { status: res.status, headers: { "content-type": ct } };
+    if (ct.includes("application/json")) return NextResponse.json(await res.json(), init);
+    return new NextResponse(await res.text(), init);
+  } catch (e) {
+    return NextResponse.json({ error: "proxy_failed", message: String(e) }, { status: 500 });
   }
 }
-
-export async function POST(req, ctx) {
-  try {
-    return await proxy(req, ctx, "POST");
-  } catch (e) {
-    return new Response(JSON.stringify({ ok: false, error: e.message }), {
-      status: 500,
-      headers: { "content-type": "application/json", "cache-control": "no-store" }
-    });
-  }
-}
-
-// (valfritt stöd för fler metoder)
-// export async function PUT(req, ctx) { return proxy(req, ctx, "PUT"); }
-// export async function PATCH(req, ctx) { return proxy(req, ctx, "PATCH"); }
-// export async function DELETE(req, ctx) { return proxy(req, ctx, "DELETE"); }
