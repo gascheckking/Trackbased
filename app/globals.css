@@ -138,3 +138,11 @@ body { background: var(--bg); color: var(--text); }
 .footer { margin: 20px 0 40px; text-align:center; color:var(--muted); font-size:13px; }
 .footer a { color: var(--primary); text-decoration: none; }
 .linklike { color: var(--primary); font-weight: 600; }
+/* --- tweaks --- */
+.wallet-chip { background:var(--panel-2); border:1px solid var(--border); padding:6px 10px; border-radius:999px; }
+.badge { background:var(--primary-2); color:#fff; padding:2px 6px; border-radius:6px; font-size:11px; }
+.linklike { text-decoration: underline; }
+.ticker-wrap { overflow:hidden; }
+.ticker { display:flex; gap:18px; padding:10px; white-space:nowrap; animation: marquee 35s linear infinite; }
+.ticker .chip { background:var(--panel-2); border:1px solid var(--border); padding:6px 10px; border-radius:999px; font-size:12px; }
+@keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
