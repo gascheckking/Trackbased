@@ -1,4 +1,6 @@
-import "./globals.css";   // 👈 måste in här
+// first line unchanged
+import "./globals.css"; // keep your styles here
+import Providers from "./providers";
 
 export const metadata = {
   title: "TrackBased – Vibe Tracker",
@@ -8,7 +10,10 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        {/* Wrap entire app with Wagmi + Web3Modal providers */}
+        <Providers>{children}</Providers>
+      </body>
     </html>
   );
 }
