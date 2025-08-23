@@ -10,9 +10,9 @@ export default function Page() {
   const [active, setActive] = useState("Trading");
   const [loading, setLoading] = useState(false);
 
-  // marketplace data
+  // marketplace datae
   const [packs, setPacks] = useState([]);
-  const [verified, setVerified] = useState([]);
+  const [verified, setVerified] = useState([]);e
   const [ticker, setTicker] = useState([]);
 
   // filters
@@ -195,30 +195,35 @@ setTicker(activityItems);
               <ForTrade wallet={wallet} />
             )}
 
-            {/* Activity – pulls list */}
+                        {/* Activity – Recent pulls list */}
             {active === "Activity" && (
               <section className="panel">
                 <div className="panel-head">
                   <div className="panel-title">Recent Pulls</div>
                   <button className="btn" onClick={refreshActivity(setTicker)}>Refresh</button>
                 </div>
-                <div className="cards">
-                  {(ticker.length ? ticker : [{id:"y", collection:"—", tokenId:"—"}]).slice(0,30).map(i => (
-                    <div key={i.id} className="card">
-                      {i.image ? <img className="thumb" alt="" src={i.image} /> : <div className="thumb" />}
-                      <div className="meta">
-                        <div className="row-between">
-                          <span className="badge">{i.rarity || "—"}</span>
-                          <span className="muted">{new Date(i.ts).toLocaleString()}</span>
+                <div className="cards" style={{gridTemplateColumns:"1fr"}}>
+                  {(ticker.length ? ticker : [{id:"y"}]).slice(0,50).map(i => (
+                    <div key={i.id} className="card row" style={{padding:10}}>
+                      {i.image ? (
+                        <img className="thumb" alt="" src={i.image} style={{width:40,height:40,borderRadius:8}} />
+                      ) : (
+                        <div className="thumb" style={{width:40,height:40,borderRadius:8}} />
+                      )}
+                      <div className="grow">
+                        <div className="title">{short(i.owner)} pulled</div>
+                        <div className="sub">
+                          <span className="linklike">{i.collection}</span> • #{i.tokenId}
+                          {" "}{rarityIcons(i.rarity)}{i.priceUsd ? ` (${i.priceUsd})` : ""}
                         </div>
-                        <div className="title">{i.collection} • #{i.tokenId}</div>
-                        <div className="sub">{short(i.owner)}</div>
                       </div>
+                      <div className="muted">{new Date(i.ts).toLocaleTimeString()}</div>
                     </div>
                   ))}
                 </div>
               </section>
             )}
+
 
             {/* Profile */}
             {active === "Profile" && (
@@ -417,6 +422,22 @@ function rarityName(r) {
   if (["1","COMMON"].includes(n)) return "COMMON";
   return (["COMMON","RARE","EPIC","LEGENDARY"].includes(n) ? n : "COMMON");
 }
+function rarityIcons(r) {
+  const n = rarityName(r);
+  if (n === "LEGENDARY") return " ★★★★";
+  if (n === "EPIC")      return " ★★★";
+  if (n === "RARE")      return " ★★";
+  return " ★";
+}
+
+function pickUsd(x) {
+  const val = x?.usdPrice ?? x?.priceUsd ?? x?.price_usd ?? x?.priceUSD ?? null;
+  if (val == null) return "";
+  const num = Number(val);
+  if (Number.isNaN(num)) return "";
+  return `$${num.toFixed(num >= 100 ? 0 : 2)}`;
+}
+
 
 function short(x = "") {
   if (!x || typeof x !== "string") return "";
