@@ -1,8 +1,8 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { wieldFetch, CHAIN_ID } from "../lib/wield";
+import { wieldFetch, CHAIN_ID, usdNum } from "../lib/wield";
 
-const TABS = ["Trading", "For Trade", "Activity", "Profile", "Bubble", "Chat", "Bought"];
+const TABS = ["Trading", "For Trade", "Activity", "Profile", "Bubble", "Chat", "Settings", "Bought"];
 
 export default function Page() {
   const [active, setActive] = useState("Trading");
@@ -15,7 +15,7 @@ export default function Page() {
 
   // filters
   const [query, setQuery] = useState("");
-  const [rarityFilter, setRarityFilter] = useState("ALL"); // ALL|COMMON|RARE|EPIC|LEGENDARY
+  const [rarityFilter, setRarityFilter] = useState("ALL");
   const [verifiedOnly, setVerifiedOnly] = useState(false);
 
   // profile / trade
@@ -23,45 +23,35 @@ export default function Page() {
   const [wallet, setWallet] = useState("");
   const [boughtItems, setBoughtItems] = useState([]);
 
-  // Theme switch
+  // Theme
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
   }, [theme]);
 
-  // Initial fetcher – Packs + Verified + Activity (+Bought if wallet)
+  // Initial fetcher
   useEffect(() => {
     (async () => {
       try {
         setLoading(true);
 
-        // PACKS (marketplace)
-        const packsRes = await wieldFetch(`vibe/boosterbox/recent?limit=200&includeMetadata=true&chainId=${CHAIN_ID}`);
+        // PACKS
+        const packsRes = await wieldFetch(`vibe/boosterbox/recent?limit=120&includeMetadata=true&chainId=${CHAIN_ID}`);
         const packsList = packsRes?.data || packsRes || [];
         setPacks(packsList);
 
         const verifiedList = packsList.filter(p => p?.metadata?.verified === true);
-        setVerified(verifiedList.slice(0, 24));
+        setVerified(verifiedList.slice(0, 18));
 
         // ACTIVITY (pulls) – openings först, fallback opened
         let actList = [];
         try {
-          const openings = await wieldFetch(`vibe/openings/recent?limit=80&includeMetadata=true&chainId=${CHAIN_ID}`);
+          const openings = await wieldFetch(`vibe/openings/recent?limit=60&includeMetadata=true&chainId=${CHAIN_ID}`);
           actList = openings?.data || openings || [];
         } catch {
-          const fb = await wieldFetch(`vibe/boosterbox/recent?limit=160&includeMetadata=true&status=opened&chainId=${CHAIN_ID}`);
+          const fb = await wieldFetch(`vibe/boosterbox/recent?limit=120&includeMetadata=true&status=opened&chainId=${CHAIN_ID}`);
           actList = fb?.data || fb || [];
         }
-        const activityItems = actList.map(x => ({
-          id: x.id ?? `${x.contractAddress}-${x.tokenId ?? Math.random()}`,
-          owner: x.owner || x.to || x.user || "",
-          collection: x.collectionName || x.series || x.collection || "Pack",
-          tokenId: x.tokenId ?? x.cardId ?? x.id ?? "—",
-          rarity: rarityName(x.rarity || x.metadata?.rarity),
-          priceUsd: pickUsd(x),
-          image: x.image || x.metadata?.image || x.cardImage,
-          ts: toMillis(x.timestamp || x.time || x.blockTime),
-        }));
-        setTicker(activityItems);
+        setTicker(mapActivity(actList));
 
         // PROFILE (köp) – feature-flag
         if (wallet) {
@@ -74,15 +64,13 @@ export default function Page() {
         } else {
           setBoughtItems([]);
         }
-      } catch (e) {
-        console.error(e);
       } finally {
         setLoading(false);
       }
     })();
   }, [wallet]);
 
-  // MARKETS — filtrering
+  // Filter packs
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return (packs || []).filter(p => {
@@ -99,18 +87,17 @@ export default function Page() {
     });
   }, [packs, query, verifiedOnly, rarityFilter]);
 
-  // Verified creators rankade på högsta USD-värde bland deras pack
+  // Verified creators (sort by highest valued pack seen)
   const verifiedCreators = useMemo(() => {
     const map = new Map();
     (packs || []).forEach(p => {
       if (!p?.metadata?.verified) return;
       const key = p.creator || p.creatorAddress || "unknown";
       const value = usdNum(p);
-      const display = p.creator || key;
-      const packName = p?.name || p?.collectionName || "Pack";
-      const prev = map.get(key) || { creator: key, name: display, count: 0, maxValue: 0, topName: "" };
+      const name = p?.name || p?.collectionName || "Pack";
+      const prev = map.get(key) || { creator: key, name: p.creator || key, count: 0, maxValue: 0, topName: "" };
       prev.count += 1;
-      if (value > prev.maxValue) { prev.maxValue = value; prev.topName = packName; }
+      if (value > prev.maxValue) { prev.maxValue = value; prev.topName = name; }
       map.set(key, prev);
     });
     return [...map.values()].sort((a,b) => b.maxValue - a.maxValue).slice(0, 20);
@@ -128,10 +115,7 @@ export default function Page() {
           </div>
           <div className="row">
             <div className="wallet-chip">{wallet ? short(wallet) : "Not Connected"}</div>
-            <button
-              className="btn"
-              onClick={() => (wallet ? setWallet("") : connectWallet(setWallet))()}
-            >
+            <button className="btn" onClick={() => wallet ? setWallet("") : connectWallet(setWallet)()}>
               {wallet ? "Disconnect" : "Connect"}
             </button>
             <button className="btn ghost" onClick={() => setTheme(t => t === "dark" ? "light" : "dark")}>
@@ -152,14 +136,14 @@ export default function Page() {
       <div className="wrapper">
         <div className="ticker-wrap panel">
           <div className="ticker">
-            {(ticker.length ? ticker : [{id:"x",owner:"someone",collection:"",tokenId:"",rarity:"",ts:Date.now()}]).map(i => (
+            {(ticker.length ? ticker : [{id:"x",owner:"someone",collection:"",tokenId:"",rarity:"",priceUsd:""}]).map(i => (
               <div key={i.id} className="chip">
-                {`${short(i.owner)} pulled ${i.collection || "—"} #${i.tokenId} ${rarityIcons(i.rarity)}${i.priceUsd ? ` (${i.priceUsd})` : ""}`}
+                {`${short(i.owner)} pulled ${i.rarity || ""} in ${i.collection || "—"} #${i.tokenId || "—"}${i.priceUsd ? ` (${i.priceUsd})` : ""}`}
               </div>
             ))}
             {ticker.map(i => (
-              <div key={i.id + "-dup"} className="chip">
-                {`${short(i.owner)} pulled ${i.collection || "—"} #${i.tokenId} ${rarityIcons(i.rarity)}${i.priceUsd ? ` (${i.priceUsd})` : ""}`}
+              <div key={`${i.id}-dup`} className="chip">
+                {`${short(i.owner)} pulled ${i.rarity || ""} in ${i.collection || "—"} #${i.tokenId || "—"}${i.priceUsd ? ` (${i.priceUsd})` : ""}`}
               </div>
             ))}
           </div>
@@ -196,9 +180,9 @@ export default function Page() {
             )}
 
             {/* For Trade */}
-            {active === "For Trade" && <ForTrade wallet={wallet} />}
+            {active === "For Trade" && (<ForTrade wallet={wallet} />)}
 
-            {/* Activity – Recent pulls list */}
+            {/* Activity */}
             {active === "Activity" && (
               <section className="panel">
                 <div className="panel-head">
@@ -206,7 +190,7 @@ export default function Page() {
                   <button className="btn" onClick={refreshActivity(setTicker)}>Refresh</button>
                 </div>
                 <div className="cards" style={{gridTemplateColumns:"1fr"}}>
-                  {(ticker.length ? ticker : [{id:"y"}]).slice(0,60).map(i => (
+                  {(ticker.length ? ticker : [{id:"y"}]).slice(0,50).map(i => (
                     <div key={i.id} className="card row" style={{padding:10}}>
                       {i.image ? (
                         <img className="thumb" alt="" src={i.image} style={{width:40,height:40,borderRadius:8}} />
@@ -216,11 +200,11 @@ export default function Page() {
                       <div className="grow">
                         <div className="title">{short(i.owner)} pulled</div>
                         <div className="sub">
-                          <span className="linklike">{i.collection || "—"}</span> • #{i.tokenId}
+                          <span className="linklike">{i.collection || "—"}</span> • #{i.tokenId || "—"}
                           {" "}{rarityIcons(i.rarity)}{i.priceUsd ? ` (${i.priceUsd})` : ""}
                         </div>
                       </div>
-                      <div className="muted">{i.ts ? new Date(i.ts).toLocaleTimeString() : ""}</div>
+                      <div className="muted">{formatTime(i.ts)}</div>
                     </div>
                   ))}
                 </div>
@@ -263,7 +247,27 @@ export default function Page() {
               </section>
             )}
 
-            {/* Bought (feature-flag) */}
+            {/* Settings */}
+            {active === "Settings" && (
+              <section className="panel">
+                <div className="panel-head"><div className="panel-title">Settings</div></div>
+                <div className="row" style={{marginBottom:12}}>
+                  <button className="btn" onClick={() => setTheme(t => t === "dark" ? "light" : "dark")}>
+                    Toggle {theme === "dark" ? "Light" : "Dark"} Mode
+                  </button>
+                </div>
+                <div className="cards">
+                  <div className="card">
+                    <div className="meta">
+                      <div className="title">Chain</div>
+                      <div className="sub">Using Base (chainId {CHAIN_ID})</div>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {/* Bought */}
             {active === "Bought" && (
               <section className="panel">
                 <div className="panel-head">
@@ -312,7 +316,7 @@ export default function Page() {
                       <div className="title truncate">{c.name}</div>
                       <div className="muted">{c.creator}</div>
                     </div>
-                    <div className="badge">{c.maxValue ? `$${c.maxValue.toFixed(0)}` : c.count}</div>
+                    <div className="badge">{c.count}</div>
                   </div>
                 )) : <div className="card">No verified creators found.</div>}
               </div>
@@ -334,18 +338,9 @@ function connectWallet(setWallet) {
   return async () => {
     try {
       if (!window?.ethereum) return alert("No wallet found");
-      // ge användaren val av konto
-      try {
-        await window.ethereum.request({
-          method: "wallet_requestPermissions",
-          params: [{ eth_accounts: {} }],
-        });
-      } catch {}
       const accs = await window.ethereum.request({ method: "eth_requestAccounts" });
       setWallet(accs?.[0] || "");
-    } catch (e) {
-      console.error(e);
-    }
+    } catch (e) { console.error(e); }
   };
 }
 
@@ -354,23 +349,13 @@ function refreshActivity(setTicker) {
     try {
       let list = [];
       try {
-        const openings = await wieldFetch(`vibe/openings/recent?limit=80&includeMetadata=true&chainId=${CHAIN_ID}`);
+        const openings = await wieldFetch(`vibe/openings/recent?limit=60&includeMetadata=true&chainId=${CHAIN_ID}`);
         list = openings?.data || openings || [];
       } catch {
-        const fb = await wieldFetch(`vibe/boosterbox/recent?limit=160&includeMetadata=true&status=opened&chainId=${CHAIN_ID}`);
+        const fb = await wieldFetch(`vibe/boosterbox/recent?limit=120&includeMetadata=true&status=opened&chainId=${CHAIN_ID}`);
         list = fb?.data || fb || [];
       }
-      const items = list.map(x => ({
-        id: x.id ?? `${x.contractAddress}-${x.tokenId ?? Math.random()}`,
-        owner: x.owner || x.to || x.user || "",
-        collection: x.collectionName || x.series || x.collection || "Pack",
-        tokenId: x.tokenId ?? x.cardId ?? x.id ?? "—",
-        rarity: rarityName(x.rarity || x.metadata?.rarity),
-        priceUsd: pickUsd(x),
-        image: x.image || x.metadata?.image || x.cardImage,
-        ts: toMillis(x.timestamp || x.time || x.blockTime),
-      }));
-      setTicker(items);
+      setTicker(mapActivity(list));
     } catch (e) { console.error(e); }
   };
 }
@@ -403,22 +388,36 @@ function rarityIcons(r) {
   return " ★";
 }
 function pickUsd(x) {
-  const val = x?.usdPrice ?? x?.priceUsd ?? x?.price_usd ?? x?.priceUSD ?? x?.metadata?.usdPrice ?? null;
+  const val = x?.usdPrice ?? x?.priceUsd ?? x?.price_usd ?? x?.priceUSD ?? null;
+  if (val == null) return "";
   const num = Number(val);
-  return Number.isFinite(num) ? `$${num.toFixed(num >= 100 ? 0 : 2)}` : "";
+  if (Number.isNaN(num)) return "";
+  return `$${num.toFixed(num >= 100 ? 0 : 2)}`;
 }
-function usdNum(x) {
-  const v = x?.usdPrice ?? x?.priceUsd ?? x?.price_usd ?? x?.priceUSD ?? x?.metadata?.usdPrice ?? null;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : 0;
+function mapActivity(list) {
+  return (list || []).map(x => ({
+    id: x.id ?? `${x.contractAddress}-${x.tokenId ?? Math.random()}`,
+    owner: x.owner || x.to || "",
+    collection: x.collectionName || x.series || "Pack",
+    tokenId: x.tokenId ?? x.id ?? "—",
+    rarity: rarityName(x.rarity),
+    priceUsd: pickUsd(x),
+    image: x.image || x.metadata?.image,
+    ts: normalizeTs(x.timestamp || x.time),
+  }));
 }
-function toMillis(t) {
-  if (!t) return Date.now();
+function normalizeTs(t) {
   const n = Number(t);
-  if (Number.isFinite(n) && n < 1e12) return n * 1000; // sec → ms
-  return Number.isFinite(n) ? n : Date.parse(t);
+  if (Number.isFinite(n)) {
+    if (n > 1e12) return n;         // ms
+    if (n > 1e9)  return n * 1000;  // s -> ms
+  }
+  const d = Date.parse(t);
+  return Number.isFinite(d) ? d : Date.now();
 }
-
+function formatTime(ms) {
+  try { return new Date(ms).toLocaleTimeString(); } catch { return ""; }
+}
 function short(x = "") {
   if (!x || typeof x !== "string") return "";
   return x.length > 10 ? `${x.slice(0,6)}…${x.slice(-4)}` : x;
@@ -427,7 +426,7 @@ function keyFor(p) {
   return p?.id || `${p?.contractAddress || "x"}-${p?.tokenId || p?.name || Math.random()}`;
 }
 
-/* ---- UI småkomponenter ---- */
+/* ---- UI ---- */
 
 function Grid({ packs = [] }) {
   if (!packs.length) return <div className="card">No packs found.</div>;
@@ -468,7 +467,7 @@ function PackSmall({ pack }) {
 
   return (
     <a className="card row" href={link} target="_blank" rel="noreferrer">
-      {img ? (<img className="thumb" alt="" src={img} />) : (<div className="thumb" style={{background:"var(--bg-1)"}} />)}
+      {img ? <img className="thumb" alt="" src={img} /> : <div className="thumb" style={{background:"var(--bg-1)"}} />}
       <div className="grow">
         <div className="title truncate" style={{display:"flex",alignItems:"center",gap:6}}>
           {name}
@@ -486,12 +485,11 @@ function PackSmall({ pack }) {
   );
 }
 
-function Placeholder({ text }) {
-  return <div className="card">{text}</div>;
-}
+function QuickBuy() { return null; } // borttagen tills token används
+
+function Placeholder({ text }) { return <div className="card">{text}</div>; }
 
 /* -------- For Trade (lokal + auto-import från holdings) ---------- */
-
 function ForTrade({ wallet }) {
   const [items, setItems] = useState(() => loadTradeList());
   const [form, setForm] = useState({ name:"", rarity:"COMMON", contract:"", tokenId:"", notes:"" });
@@ -513,7 +511,7 @@ function ForTrade({ wallet }) {
     try {
       const res = await wieldFetch(`vibe/owner/${wallet}?chainId=${CHAIN_ID}`);
       const holdings = res?.holdings || res?.cards || [];
-      const mapped = holdings.map(h => ({
+      const mapped = (holdings || []).map(h => ({
         id: `${h.contract || h.address}-${h.tokenId || h.id}-${Math.random()}`,
         name: h.name || h.series || "Item",
         rarity: rarityName(h.rarity),
@@ -572,15 +570,6 @@ function ForTrade({ wallet }) {
     </section>
   );
 }
-
-function loadTradeList() {
-  try { return JSON.parse(localStorage.getItem("forTrade") || "[]"); } catch { return []; }
-}
-function saveTradeList(list) {
-  try { localStorage.setItem("forTrade", JSON.stringify(list || [])); } catch {}
-}
-function dedupeById(arr) {
-  const seen = new Set(); const out = [];
-  for (const x of arr) { if (seen.has(x.id)) continue; seen.add(x.id); out.push(x); }
-  return out;
-}
+function loadTradeList() { try { return JSON.parse(localStorage.getItem("forTrade") || "[]"); } catch { return []; } }
+function saveTradeList(list) { try { localStorage.setItem("forTrade", JSON.stringify(list || [])); } catch {} }
+function dedupeById(arr) { const seen = new Set(); const out=[]; for (const x of arr){ if(seen.has(x.id))continue; seen.add(x.id); out.push(x);} return out; }
