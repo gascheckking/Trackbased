@@ -7,12 +7,11 @@ const TNYL_TOKEN = process.env.NEXT_PUBLIC_TNYL_TOKEN || "";
 const TABS = ["Trading", "For Trade", "Activity", "Profile", "Bubble", "Chat", "Settings", "Bought"];
 
 export default function Page() {
-  const [active, setActive] = useState("Trading");
-  const [loading, setLoading] = useState(false);
+  c  const [loading, setLoading] = useState(false);
 
-  // marketplace datae
+  // marketplace data
   const [packs, setPacks] = useState([]);
-  const [verified, setVerified] = useState([]);e
+  const [verified, setVerified] = useState([]);
   const [ticker, setTicker] = useState([]);
 
   // filters
